@@ -8,8 +8,11 @@ import java.time.LocalDateTime
  * Promosi otomatis — diterapkan tanpa input kode saat kondisi cart terpenuhi.
  *
  * Tipe promosi (promo_type):
- *   DISCOUNT_BY_ORDER — diskon ke total transaksi jika memenuhi min_purchase
- *   BUY_X_GET_Y       — beli X item, dapatkan reward Y
+ *   DISCOUNT_BY_ORDER         — diskon ke total transaksi jika memenuhi min_purchase
+ *   BUY_X_GET_Y               — beli X item, dapatkan reward Y
+ *   DISCOUNT_BY_ITEM_SUBTOTAL — diskon ke item tertentu jika subtotal item memenuhi threshold
+ *                               (buyScope + promotion_product menentukan item yang dihitung,
+ *                                min_purchase = threshold subtotal, value/valueType = nilai diskon)
  *
  * Buy scope / Reward scope:
  *   ALL      — berlaku untuk semua produk
