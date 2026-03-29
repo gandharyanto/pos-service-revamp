@@ -3,12 +3,12 @@ package id.nahsbyte.pos_service_revamp.entity
 import jakarta.persistence.*
 
 /**
- * Binding produk ke discount code (untuk scope=PRODUCT).
- * Satu discount bisa berlaku untuk satu atau lebih produk.
+ * Binding kategori ke discount code (untuk scope=CATEGORY).
+ * Satu discount bisa berlaku untuk satu atau lebih kategori.
  */
 @Entity
-@Table(name = "discount_product")
-class DiscountProduct {
+@Table(name = "discount_category")
+class DiscountCategory {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     var id: Long = 0
@@ -16,8 +16,8 @@ class DiscountProduct {
     @Column(name = "discount_id", nullable = false)
     var discountId: Long = 0
 
-    @Column(name = "product_id", nullable = false)
-    var productId: Long = 0
+    @Column(name = "category_id", nullable = false)
+    var categoryId: Long = 0
 
     @Column(name = "merchant_id", nullable = false)
     var merchantId: Long = 0

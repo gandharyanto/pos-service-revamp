@@ -4,6 +4,19 @@ import jakarta.persistence.*
 import java.math.BigDecimal
 import java.time.LocalDateTime
 
+/**
+ * Diskon berbasis kode — kasir atau pelanggan input kode saat checkout.
+ *
+ * Scope (cakupan produk yang didiskon):
+ *   ALL      — berlaku untuk seluruh transaksi
+ *   PRODUCT  — hanya untuk produk tertentu (lihat tabel discount_product)
+ *   CATEGORY — hanya untuk kategori tertentu (lihat tabel discount_category)
+ *
+ * Channel:
+ *   POS    — hanya di kasir
+ *   ONLINE — hanya di online store
+ *   BOTH   — keduanya
+ */
 @Entity
 @Table(name = "discount")
 class Discount : BaseAuditEntity() {
@@ -16,50 +29,39 @@ class Discount : BaseAuditEntity() {
 
     var name: String = ""
 
-    /**
-     * Cara diskon dipicu:
-     * TRANSACTION   — diskon flat ke total transaksi
-     * ITEM_QTY      — diskon bertingkat berdasarkan qty item (via discount_tier)
-     * ITEM_SUBTOTAL — diskon bertingkat berdasarkan subtotal item (via discount_tier)
-     */
-    var type: String = "TRANSACTION"
+    /** Kode yang diinput kasir/pelanggan. Null = predefined (tap langsung tanpa kode) */
+    var code: String? = null
 
-    /**
-     * Cara diskon diaplikasikan:
-     * AUTO   — otomatis jika kondisi terpenuhi
-     * MANUAL — kasir pilih manual
-     */
-    @Column(name = "apply_mode", nullable = false)
-    var applyMode: String = "MANUAL"
-
-    /**
-     * Boleh digabung dengan diskon lain dalam satu transaksi.
-     * false = hanya satu diskon yang berlaku (exclusive)
-     */
-    var stackable: Boolean = false
-
-    /**
-     * Tipe nilai diskon (untuk type=TRANSACTION):
-     * PERCENTAGE | AMOUNT
-     */
+    /** PERCENTAGE | AMOUNT */
     @Column(name = "value_type")
     var valueType: String = "PERCENTAGE"
 
-    /**
-     * Nilai diskon (untuk type=TRANSACTION, flat).
-     * Untuk ITEM_QTY dan ITEM_SUBTOTAL, nilai per tier di tabel discount_tier.
-     */
     var value: BigDecimal = BigDecimal.ZERO
 
-    /**
-     * Trigger untuk AUTO+TRANSACTION: minimum total transaksi.
-     * Null = tidak ada minimum.
-     */
+    /** Batas maksimum nilai diskon (untuk valueType=PERCENTAGE). Null = tidak ada batas */
+    @Column(name = "max_discount_amount")
+    var maxDiscountAmount: BigDecimal? = null
+
+    /** Minimum total transaksi agar diskon berlaku */
     @Column(name = "min_purchase")
     var minPurchase: BigDecimal? = null
 
+    /** ALL | PRODUCT | CATEGORY */
+    var scope: String = "ALL"
+
+    /** POS | ONLINE | BOTH */
+    var channel: String = "BOTH"
+
     /** ALL_OUTLET | SPECIFIC_OUTLET */
     var visibility: String = "ALL_OUTLET"
+
+    /** Total batas pemakaian kode ini. Null = tidak terbatas */
+    @Column(name = "usage_limit")
+    var usageLimit: Int? = null
+
+    /** Batas pemakaian per pelanggan. Null = tidak terbatas */
+    @Column(name = "usage_per_customer")
+    var usagePerCustomer: Int? = null
 
     @Column(name = "start_date")
     var startDate: LocalDateTime? = null
@@ -69,8 +71,4 @@ class Discount : BaseAuditEntity() {
 
     @Column(name = "is_active")
     var isActive: Boolean = true
-
-    /** Urutan prioritas untuk strategi DISPLAY_ORDER (ascending = lebih prioritas) */
-    @Column(name = "display_order")
-    var displayOrder: Int? = null
 }
