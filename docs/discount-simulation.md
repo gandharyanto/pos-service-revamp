@@ -4,9 +4,9 @@ Dokumen ini menjelaskan mekanisme diskon, promosi, dan price book secara lengkap
 
 ---
 
-## Arsitektur 3 Layer
+## Arsitektur 5 Layer
 
-Kalkulasi diskon dieksekusi dalam urutan ini setiap kali transaksi dibuat:
+Kalkulasi dieksekusi dalam urutan ini setiap kali transaksi dibuat:
 
 ```
 Cart items (productId + qty)
@@ -30,11 +30,30 @@ Cart items (productId + qty)
 └──────────────────────────────┘
        │ discountAmount
        ▼
-netSubTotal = grossSubTotal - promoAmount - discountAmount
+grossSubTotal = Σ(effectivePrice × qty)
+netSubTotal   = grossSubTotal - promoAmount - discountAmount
        │
        ▼
-Tax + Service Charge + Rounding → totalAmount
+Tax + Service Charge + Rounding → totalAmount (sebelum layer 4 & 5)
+       │
+       ▼
+┌──────────────────────────────┐
+│  LAYER 4 — VOUCHER           │  Voucher sebagai payment instrument
+│  (mengurangi totalAmount,    │  Tax & SC TIDAK terpengaruh
+│   bukan netSubTotal)         │
+└──────────────────────────────┘
+       │ voucherAmount
+       ▼
+┌──────────────────────────────┐
+│  LAYER 5 — LOYALTY REDEEM    │  Poin ditukar sebagai payment (PAYMENT)
+│  (mengurangi totalAmount)    │  atau sebagai diskon (DISCOUNT)
+└──────────────────────────────┘
+       │ loyaltyRedeemAmount
+       ▼
+amountDue = totalAmount - voucherAmount - loyaltyRedeemAmount
 ```
+
+> **Layer 4 & 5** bekerja pada sisi **payment** — tidak mempengaruhi netSubTotal, tax, atau service charge.
 
 ---
 
@@ -420,9 +439,16 @@ Client HARUS mengirim nilai yang sudah dikalkulasi agar server bisa memvalidasi:
 
 ```json
 {
-  "subTotal": 48100,
+  "grossSubTotal": 79000,
   "promoAmount": 25900,
   "discountAmount": 5000,
+  "subTotal": 48100,
+  "discountCode": "SAVE5K",
+  "voucherCode": null,
+  "voucherAmount": 0,
+  "loyaltyRedeemPoints": null,
+  "loyaltyRedeemMode": null,
+  "loyaltyRedeemAmount": 0,
   "totalServiceCharge": 2405,
   "totalTax": 5556,
   "totalRounding": -61,
@@ -432,7 +458,6 @@ Client HARUS mengirim nilai yang sudah dikalkulasi agar server bisa memvalidasi:
   "cashChange": 4000,
   "orderTypeId": null,
   "customerId": null,
-  "discountCode": "SAVE5K",
   "transactionItems": [
     {
       "productId": 42,
@@ -446,13 +471,53 @@ Client HARUS mengirim nilai yang sudah dikalkulasi agar server bisa memvalidasi:
       "qty": 1,
       "price": 25000,
       "totalPrice": 25000,
-      "discountAmount": null
+      "discountAmount": 0
     }
   ]
 }
 ```
 
 Jika nilai dari client tidak cocok dengan kalkulasi server → HTTP **422** dengan detail mismatch.
+
+### Contoh dengan Voucher + Loyalty
+
+```json
+{
+  "grossSubTotal": 100000,
+  "promoAmount": 0,
+  "discountAmount": 0,
+  "subTotal": 100000,
+  "voucherCode": "VCH-ABC123",
+  "voucherAmount": 20000,
+  "loyaltyRedeemPoints": 500,
+  "loyaltyRedeemMode": "PAYMENT",
+  "loyaltyRedeemAmount": 5000,
+  "totalServiceCharge": 5000,
+  "totalTax": 11550,
+  "totalRounding": 0,
+  "totalAmount": 91550,
+  "customerId": 7,
+  "paymentMethod": "CASH",
+  "cashTendered": 91550,
+  "cashChange": 0,
+  "transactionItems": [...]
+}
+```
+
+```
+grossSubTotal      = 100.000
+netSubTotal        = 100.000 (tidak ada promo/diskon)
+SC 5%              =   5.000
+Tax 11% exclusive  =  11.550
+amountBeforeRound  = 116.550
+rounding           =       0
+totalAmount (sebelum layer 4&5) = 116.550
+─────────────────────────────────
+voucherAmount      =  20.000  (layer 4)
+loyaltyRedeemAmount=   5.000  (layer 5, 500 poin × rate 10/poin)
+─────────────────────────────────
+amountDue = 116.550 - 20.000 - 5.000 = 91.550
+```
 
 ---
 

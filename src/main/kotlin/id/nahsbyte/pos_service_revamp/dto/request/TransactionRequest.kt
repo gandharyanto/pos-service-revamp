@@ -42,6 +42,28 @@ data class CreateTransactionRequest(
     /** Total diskon dari kode diskon (untuk validasi) */
     val discountAmount: BigDecimal? = null,
 
+    /**
+     * Kode voucher yang digunakan sebagai metode pembayaran.
+     * Voucher mengurangi totalAmount dari sisi pembayaran (bukan dari subtotal).
+     * Tax dan SC tetap dihitung dari total penuh.
+     */
+    val voucherCode: String? = null,
+
+    /** Nilai voucher yang diklaim (untuk validasi vs server) */
+    val voucherAmount: BigDecimal? = null,
+
+    /**
+     * Poin loyalty yang ingin diredeem.
+     * Mode redeem ditentukan oleh konfigurasi LoyaltyRedemptionRule aktif.
+     */
+    val loyaltyRedeemPoints: BigDecimal? = null,
+
+    /** Mode redeem: PAYMENT | DISCOUNT. Default server-side dari rule aktif. */
+    val loyaltyRedeemMode: String? = null,
+
+    /** Nilai rupiah redeem poin yang diklaim (untuk validasi vs server, hanya mode PAYMENT) */
+    val loyaltyRedeemAmount: BigDecimal? = null,
+
     val transactionItems: List<TransactionItemRequest>
 )
 

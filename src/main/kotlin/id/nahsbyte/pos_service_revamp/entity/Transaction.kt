@@ -120,4 +120,18 @@ class Transaction : BaseAuditEntity() {
 
     @Column(name = "refund_date")
     var refundDate: java.time.LocalDateTime? = null
+
+    // --- Loyalty ---
+
+    /** Poin yang diperoleh dari transaksi ini */
+    @Column(name = "loyalty_points_earned")
+    var loyaltyPointsEarned: BigDecimal? = null
+
+    /** Poin yang ditukarkan dalam transaksi ini */
+    @Column(name = "loyalty_points_redeemed")
+    var loyaltyPointsRedeemed: BigDecimal? = null
+
+    /** Nilai rupiah dari redeem poin (mode PAYMENT) */
+    @Column(name = "loyalty_redeem_amount")
+    var loyaltyRedeemAmount: BigDecimal? = null
 }

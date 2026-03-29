@@ -35,6 +35,63 @@ Authorization: Bearer <token>
 | 21 | PUT    | `/pos/transaction/update/{merchantTrxId}` | Update transaksi / catat pembayaran |
 | 22 | GET    | `/pos/summary-report/list` | Laporan ringkasan |
 | 23 | POST   | `/images/upload` | Upload gambar |
+| **Customer** | | | |
+| 24 | GET    | `/pos/customer/list` | List customer. `?phone=` / `?email=` untuk cari spesifik |
+| 25 | GET    | `/pos/customer/detail/{customerId}` | Detail customer |
+| 26 | POST   | `/pos/customer/add` | Tambah customer |
+| 27 | PUT    | `/pos/customer/update` | Update customer |
+| 28 | DELETE | `/pos/customer/delete/{customerId}` | Hapus customer (soft delete) |
+| 29 | PUT    | `/pos/customer/loyalty/adjust` | Adjust poin loyalty manual |
+| 30 | GET    | `/pos/customer/{customerId}/loyalty-history` | Riwayat transaksi poin |
+| **Order Type** | | | |
+| 31 | GET    | `/pos/order-type/list` | List order type |
+| 32 | POST   | `/pos/order-type/add` | Tambah order type |
+| 33 | PUT    | `/pos/order-type/update` | Update order type |
+| 34 | DELETE | `/pos/order-type/delete/{id}` | Hapus order type |
+| **Cashier Shift** | | | |
+| 35 | POST   | `/pos/shift/open` | Buka shift kasir |
+| 36 | PUT    | `/pos/shift/close` | Tutup shift kasir |
+| 37 | GET    | `/pos/shift/list/{outletId}` | Riwayat shift. `?status=OPEN` untuk shift aktif |
+| **Discount** | | | |
+| 40 | GET    | `/pos/discount/list` | List diskon |
+| 41 | GET    | `/pos/discount/detail/{id}` | Detail diskon |
+| 42 | POST   | `/pos/discount/add` | Tambah diskon |
+| 43 | PUT    | `/pos/discount/update` | Update diskon |
+| 44 | DELETE | `/pos/discount/delete/{id}` | Hapus diskon |
+| 45 | POST   | `/pos/discount/validate` | Validasi kode diskon |
+| **Promotion** | | | |
+| 46 | GET    | `/pos/promotion/list` | List promosi |
+| 47 | GET    | `/pos/promotion/detail/{id}` | Detail promosi |
+| 48 | POST   | `/pos/promotion/add` | Tambah promosi |
+| 49 | PUT    | `/pos/promotion/update` | Update promosi |
+| 50 | DELETE | `/pos/promotion/delete/{id}` | Hapus promosi |
+| **Price Book** | | | |
+| 51 | GET    | `/pos/price-book/list` | List price book |
+| 52 | GET    | `/pos/price-book/detail/{id}` | Detail price book |
+| 53 | POST   | `/pos/price-book/add` | Tambah price book |
+| 54 | PUT    | `/pos/price-book/update` | Update price book |
+| 55 | DELETE | `/pos/price-book/delete/{id}` | Hapus price book |
+| **Voucher** | | | |
+| 56 | GET    | `/pos/voucher/brand/list` | List brand beserta groups-nya (embed) |
+| 57 | GET    | `/pos/voucher/brand/detail/{id}` | Detail brand beserta groups-nya |
+| 58 | POST   | `/pos/voucher/brand/add` | Tambah voucher brand |
+| 59 | PUT    | `/pos/voucher/brand/update` | Update voucher brand |
+| 60 | DELETE | `/pos/voucher/brand/delete/{id}` | Hapus voucher brand |
+| 61 | POST   | `/pos/voucher/group/add` | Tambah group ke brand |
+| 62 | PUT    | `/pos/voucher/group/update` | Update voucher group |
+| 63 | DELETE | `/pos/voucher/group/delete/{id}` | Hapus voucher group |
+| 64 | GET    | `/pos/voucher/code/list?groupId=` | List kode voucher per group |
+| 65 | POST   | `/pos/voucher/code/add` | Tambah kode voucher |
+| 66 | POST   | `/pos/voucher/code/bulk-import` | Import kode voucher massal |
+| 67 | PUT    | `/pos/voucher/code/cancel/{voucherId}` | Batalkan voucher |
+| **Loyalty** | | | |
+| 68 | GET    | `/pos/loyalty/list` | List program beserta rules-nya. `?isActive=true` untuk aktif |
+| 69 | GET    | `/pos/loyalty/detail/{id}` | Detail program beserta rules-nya |
+| 70 | POST   | `/pos/loyalty/add` | Tambah program (beserta rules dalam body) |
+| 71 | PUT    | `/pos/loyalty/update` | Update program + full-replace rules |
+| 72 | DELETE | `/pos/loyalty/delete/{id}` | Hapus program |
+| 73 | GET    | `/pos/loyalty/product-setting/{productId}` | Get loyalty setting per produk |
+| 74 | PUT    | `/pos/loyalty/product-setting` | Set loyalty setting per produk |
 
 ---
 
@@ -1216,3 +1273,7 @@ Semua mismatch dikumpulkan dan dikembalikan sekaligus dalam satu response 422.
 4. **Soft-delete produk** — `deleted_date` diisi tetapi data fisik tetap ada di DB, sehingga data transaksi historis tetap valid.
 
 5. **Snapshot transaksi** — `transaction_items` menyimpan `productName`, `price`, `taxName`, `taxPercentage` pada saat transaksi dibuat. Perubahan harga produk setelah transaksi tidak mempengaruhi data historis.
+
+6. **Kalkulasi transaksi** — Server melakukan validasi server-side terhadap semua nilai yang dikirim client. Lihat `docs/discount-simulation.md` untuk detail flow 5-layer (Price Book → Promotion → Discount Code → Voucher → Loyalty Redeem).
+
+7. **Endpoint Customer, OrderType, CashierShift, Voucher, Loyalty, Discount, Promotion, PriceBook** (no. 24–80) belum memiliki dokumentasi request/response detail di dokumen ini. Lihat docs masing-masing modul: `docs/voucher.md`, `docs/loyalty.md`, `docs/discount-simulation.md`.

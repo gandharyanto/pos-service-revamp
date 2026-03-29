@@ -1,33 +1,24 @@
 package id.nahsbyte.pos_service_revamp.controller
 
-import id.nahsbyte.pos_service_revamp.dto.request.CreatePriceBookRequest
-import id.nahsbyte.pos_service_revamp.dto.request.UpdatePriceBookRequest
+import id.nahsbyte.pos_service_revamp.dto.request.CreateOrderTypeRequest
+import id.nahsbyte.pos_service_revamp.dto.request.UpdateOrderTypeRequest
 import id.nahsbyte.pos_service_revamp.dto.response.ApiResponse
 import id.nahsbyte.pos_service_revamp.security.JwtUtil
-import id.nahsbyte.pos_service_revamp.service.PriceBookService
+import id.nahsbyte.pos_service_revamp.service.OrderTypeService
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
 @RestController
-@RequestMapping("/pos/price-book")
-class PriceBookController(
-    private val priceBookService: PriceBookService,
+@RequestMapping("/pos/order-type")
+class OrderTypeController(
+    private val orderTypeService: OrderTypeService,
     private val jwtUtil: JwtUtil
 ) {
 
-    /**
-     * GET /pos/price-book/list
-     * GET /pos/price-book/list?isActive=true&type=WHOLESALE&isDefault=true
-     */
     @GetMapping("/list")
-    fun list(
-        @RequestHeader("Authorization") auth: String,
-        @RequestParam(required = false) isActive: Boolean?,
-        @RequestParam(required = false) type: String?,
-        @RequestParam(required = false) isDefault: Boolean?
-    ): ResponseEntity<ApiResponse<*>> {
+    fun list(@RequestHeader("Authorization") auth: String): ResponseEntity<ApiResponse<*>> {
         val merchantId = jwtUtil.extractMerchantId(jwtUtil.resolveToken(auth))
-        return ResponseEntity.ok(ApiResponse.ok(priceBookService.list(merchantId, isActive, type, isDefault)))
+        return ResponseEntity.ok(ApiResponse.ok(orderTypeService.list(merchantId)))
     }
 
     @GetMapping("/detail/{id}")
@@ -36,25 +27,25 @@ class PriceBookController(
         @PathVariable id: Long
     ): ResponseEntity<ApiResponse<*>> {
         val merchantId = jwtUtil.extractMerchantId(jwtUtil.resolveToken(auth))
-        return ResponseEntity.ok(ApiResponse.ok(priceBookService.detail(merchantId, id)))
+        return ResponseEntity.ok(ApiResponse.ok(orderTypeService.detail(merchantId, id)))
     }
 
     @PostMapping("/add")
     fun add(
         @RequestHeader("Authorization") auth: String,
-        @RequestBody request: CreatePriceBookRequest
+        @RequestBody request: CreateOrderTypeRequest
     ): ResponseEntity<ApiResponse<*>> {
         val merchantId = jwtUtil.extractMerchantId(jwtUtil.resolveToken(auth))
-        return ResponseEntity.ok(ApiResponse.ok(priceBookService.create(merchantId, request)))
+        return ResponseEntity.ok(ApiResponse.ok(orderTypeService.create(merchantId, request)))
     }
 
     @PutMapping("/update")
     fun update(
         @RequestHeader("Authorization") auth: String,
-        @RequestBody request: UpdatePriceBookRequest
+        @RequestBody request: UpdateOrderTypeRequest
     ): ResponseEntity<ApiResponse<*>> {
         val merchantId = jwtUtil.extractMerchantId(jwtUtil.resolveToken(auth))
-        return ResponseEntity.ok(ApiResponse.ok(priceBookService.update(merchantId, request)))
+        return ResponseEntity.ok(ApiResponse.ok(orderTypeService.update(merchantId, request)))
     }
 
     @DeleteMapping("/delete/{id}")
@@ -63,7 +54,7 @@ class PriceBookController(
         @PathVariable id: Long
     ): ResponseEntity<ApiResponse<*>> {
         val merchantId = jwtUtil.extractMerchantId(jwtUtil.resolveToken(auth))
-        priceBookService.delete(merchantId, id)
-        return ResponseEntity.ok(ApiResponse.ok<Nothing>("Price book deleted"))
+        orderTypeService.delete(merchantId, id)
+        return ResponseEntity.ok(ApiResponse.ok<Nothing>("OrderType deleted"))
     }
 }

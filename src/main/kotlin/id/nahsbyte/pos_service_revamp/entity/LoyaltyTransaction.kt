@@ -22,10 +22,23 @@ class LoyaltyTransaction {
 
     var points: BigDecimal = BigDecimal.ZERO
 
-    /** GET | REDEEM | ADJUSTMENT */
-    var type: String = "GET"
+    /**
+     * EARN             — poin diperoleh dari transaksi
+     * REDEEM_PAYMENT   — poin ditukarkan sebagai alat bayar
+     * REDEEM_DISCOUNT  — poin ditukarkan sebagai diskon
+     * REDEEM_PRODUCT   — poin ditukarkan sebagai produk gratis
+     * EXPIRE           — poin kadaluarsa
+     * ADJUST           — penyesuaian manual oleh merchant
+     *
+     * Legacy: GET | REDEEM | ADJUSTMENT (dipertahankan untuk data lama)
+     */
+    var type: String = "EARN"
 
     var note: String? = null
+
+    /** Kapan poin ini kadaluarsa (untuk expiry mode ROLLING_DAYS) */
+    @Column(name = "expiry_date")
+    var expiryDate: LocalDateTime? = null
 
     @Column(name = "created_by")
     var createdBy: String? = null

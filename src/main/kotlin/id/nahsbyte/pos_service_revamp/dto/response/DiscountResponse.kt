@@ -19,9 +19,10 @@ data class DiscountResponse(
     val startDate: LocalDateTime?,
     val endDate: LocalDateTime?,
     val isActive: Boolean,
-    val outlets: List<Long>,
-    val productIds: List<Long>,
-    val categoryIds: List<Long>,
+    val outlets: List<Long> = emptyList(),
+    val productIds: List<Long> = emptyList(),
+    val categoryIds: List<Long> = emptyList(),
+    val customerIds: List<Long> = emptyList(),
     val createdDate: LocalDateTime?,
     val modifiedDate: LocalDateTime?
 )

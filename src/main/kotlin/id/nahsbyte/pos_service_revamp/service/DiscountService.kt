@@ -1,12 +1,8 @@
 package id.nahsbyte.pos_service_revamp.service
 
-import id.nahsbyte.pos_service_revamp.dto.request.CreateDiscountRequest
-import id.nahsbyte.pos_service_revamp.dto.request.UpdateDiscountRequest
+import id.nahsbyte.pos_service_revamp.dto.request.*
 import id.nahsbyte.pos_service_revamp.dto.response.DiscountResponse
-import id.nahsbyte.pos_service_revamp.entity.Discount
-import id.nahsbyte.pos_service_revamp.entity.DiscountCategory
-import id.nahsbyte.pos_service_revamp.entity.DiscountOutlet
-import id.nahsbyte.pos_service_revamp.entity.DiscountProduct
+import id.nahsbyte.pos_service_revamp.entity.*
 import id.nahsbyte.pos_service_revamp.exception.ResourceNotFoundException
 import id.nahsbyte.pos_service_revamp.repository.*
 import org.springframework.stereotype.Service
@@ -16,24 +12,51 @@ import java.time.LocalDateTime
 @Service
 class DiscountService(
     private val discountRepository: DiscountRepository,
+    private val discountOutletRepository: DiscountOutletRepository,
     private val discountProductRepository: DiscountProductRepository,
     private val discountCategoryRepository: DiscountCategoryRepository,
-    private val discountOutletRepository: DiscountOutletRepository
+    private val discountCustomerRepository: DiscountCustomerRepository
 ) {
 
-    fun list(merchantId: Long): List<DiscountResponse> =
-        discountRepository.findAll()
-            .filter { it.merchantId == merchantId }
-            .map { it.toResponse() }
+    fun list(
+        merchantId: Long,
+        isActive: Boolean? = null,
+        channel: String? = null,
+        scope: String? = null,
+        keyword: String? = null
+    ): List<DiscountResponse> {
+        var discounts = discountRepository.findByMerchantId(merchantId)
+        if (isActive != null) discounts = discounts.filter { it.isActive == isActive }
+        if (channel != null) discounts = discounts.filter { it.channel == channel }
+        if (scope != null) discounts = discounts.filter { it.scope == scope }
+        if (keyword != null) discounts = discounts.filter { it.name.contains(keyword, ignoreCase = true) }
 
-    fun detail(merchantId: Long, discountId: Long): DiscountResponse =
-        discountRepository.findById(discountId)
+        if (discounts.isEmpty()) return emptyList()
+
+        val ids = discounts.map { it.id }
+        val outletMap = discountOutletRepository.findByDiscountIdIn(ids).groupBy { it.discountId }
+        val productMap = discountProductRepository.findByDiscountIdIn(ids).groupBy { it.discountId }
+        val categoryMap = discountCategoryRepository.findByDiscountIdIn(ids).groupBy { it.discountId }
+        val customerMap = discountCustomerRepository.findByDiscountIdIn(ids).groupBy { it.discountId }
+
+        return discounts.map { d ->
+            d.toResponse(
+                outlets = outletMap[d.id]?.map { it.outletId } ?: emptyList(),
+                productIds = productMap[d.id]?.map { it.productId } ?: emptyList(),
+                categoryIds = categoryMap[d.id]?.map { it.categoryId } ?: emptyList(),
+                customerIds = customerMap[d.id]?.map { it.customerId } ?: emptyList()
+            )
+        }
+    }
+
+    fun detail(merchantId: Long, id: Long): DiscountResponse =
+        discountRepository.findById(id)
             .filter { it.merchantId == merchantId }
-            .map { it.toResponse() }
             .orElseThrow { ResourceNotFoundException("Discount not found") }
+            .toDetailResponse()
 
     @Transactional
-    fun create(merchantId: Long, username: String, request: CreateDiscountRequest): DiscountResponse {
+    fun create(merchantId: Long, request: CreateDiscountRequest): DiscountResponse {
         val discount = Discount().apply {
             this.merchantId = merchantId
             name = request.name
@@ -50,26 +73,17 @@ class DiscountService(
             startDate = request.startDate
             endDate = request.endDate
             isActive = request.isActive
-            createdBy = username
-            createdDate = LocalDateTime.now()
-            modifiedBy = username
-            modifiedDate = LocalDateTime.now()
         }
-        val saved = discountRepository.save(discount)
-
-        if (request.outletIds.isNotEmpty()) bindOutlets(saved.id, merchantId, request.outletIds)
-        if (request.productIds.isNotEmpty()) bindProducts(saved.id, merchantId, request.productIds)
-        if (request.categoryIds.isNotEmpty()) bindCategories(saved.id, merchantId, request.categoryIds)
-
-        return saved.toResponse()
+        discountRepository.save(discount)
+        saveBindings(discount.id, merchantId, request.outletIds, request.productIds, request.categoryIds, request.customerIds)
+        return discount.toDetailResponse()
     }
 
     @Transactional
-    fun update(merchantId: Long, username: String, request: UpdateDiscountRequest): DiscountResponse {
+    fun update(merchantId: Long, request: UpdateDiscountRequest): DiscountResponse {
         val discount = discountRepository.findById(request.id)
             .filter { it.merchantId == merchantId }
             .orElseThrow { ResourceNotFoundException("Discount not found") }
-
         discount.apply {
             name = request.name
             code = request.code
@@ -85,104 +99,93 @@ class DiscountService(
             startDate = request.startDate
             endDate = request.endDate
             isActive = request.isActive
-            modifiedBy = username
-            modifiedDate = LocalDateTime.now()
         }
-        return discountRepository.save(discount).toResponse()
+        discountRepository.save(discount)
+        discountOutletRepository.deleteAllByDiscountId(discount.id)
+        discountProductRepository.deleteAllByDiscountId(discount.id)
+        discountCategoryRepository.deleteAllByDiscountId(discount.id)
+        discountCustomerRepository.deleteAllByDiscountId(discount.id)
+        saveBindings(discount.id, merchantId, request.outletIds, request.productIds, request.categoryIds, request.customerIds)
+        return discount.toDetailResponse()
     }
 
-    fun delete(merchantId: Long, discountId: Long) {
-        val discount = discountRepository.findById(discountId)
+    @Transactional
+    fun delete(merchantId: Long, id: Long) {
+        val discount = discountRepository.findById(id)
             .filter { it.merchantId == merchantId }
             .orElseThrow { ResourceNotFoundException("Discount not found") }
+        discountOutletRepository.deleteAllByDiscountId(id)
+        discountProductRepository.deleteAllByDiscountId(id)
+        discountCategoryRepository.deleteAllByDiscountId(id)
+        discountCustomerRepository.deleteAllByDiscountId(id)
         discountRepository.delete(discount)
     }
 
-    // --- Binding management ---
+    fun validate(merchantId: Long, request: ValidateDiscountRequest): DiscountResponse {
+        val discount = discountRepository.findByCodeAndMerchantIdAndIsActiveTrue(request.code, merchantId)
+            .orElseThrow { IllegalArgumentException("Discount code not found or inactive") }
 
-    @Transactional
-    fun addProducts(merchantId: Long, discountId: Long, productIds: List<Long>) {
-        validateOwnership(merchantId, discountId)
-        val existing = discountProductRepository.findByDiscountId(discountId).map { it.productId }.toSet()
-        bindProducts(discountId, merchantId, productIds.filter { it !in existing })
+        val now = LocalDateTime.now()
+        if (discount.startDate != null && now.isBefore(discount.startDate))
+            throw IllegalArgumentException("Discount not yet active")
+        if (discount.endDate != null && now.isAfter(discount.endDate))
+            throw IllegalArgumentException("Discount expired")
+        if (discount.minPurchase != null && request.grossSubTotal < discount.minPurchase!!)
+            throw IllegalArgumentException("Minimum purchase not met: ${discount.minPurchase}")
+
+        if (discount.visibility == "SPECIFIC_OUTLET" && request.outletId != null) {
+            val outletIds = discountOutletRepository.findByDiscountId(discount.id).map { it.outletId }
+            if (request.outletId !in outletIds)
+                throw IllegalArgumentException("Discount not valid for this outlet")
+        }
+
+        if (request.customerId != null) {
+            val customerIds = discountCustomerRepository.findByDiscountId(discount.id).map { it.customerId }
+            if (customerIds.isNotEmpty() && request.customerId !in customerIds)
+                throw IllegalArgumentException("Discount not available for this customer")
+        }
+
+        return discount.toDetailResponse()
     }
 
-    @Transactional
-    fun removeProduct(merchantId: Long, discountId: Long, productId: Long) {
-        validateOwnership(merchantId, discountId)
-        discountProductRepository.findByDiscountId(discountId)
-            .firstOrNull { it.productId == productId }
-            ?.let { discountProductRepository.delete(it) }
-    }
-
-    @Transactional
-    fun addCategories(merchantId: Long, discountId: Long, categoryIds: List<Long>) {
-        validateOwnership(merchantId, discountId)
-        val existing = discountCategoryRepository.findByDiscountId(discountId).map { it.categoryId }.toSet()
-        bindCategories(discountId, merchantId, categoryIds.filter { it !in existing })
-    }
-
-    @Transactional
-    fun removeCategory(merchantId: Long, discountId: Long, categoryId: Long) {
-        validateOwnership(merchantId, discountId)
-        discountCategoryRepository.findByDiscountId(discountId)
-            .firstOrNull { it.categoryId == categoryId }
-            ?.let { discountCategoryRepository.delete(it) }
-    }
-
-    @Transactional
-    fun addOutlets(merchantId: Long, discountId: Long, outletIds: List<Long>) {
-        validateOwnership(merchantId, discountId)
-        val existing = discountOutletRepository.findByDiscountId(discountId).map { it.outletId }.toSet()
-        bindOutlets(discountId, merchantId, outletIds.filter { it !in existing })
-    }
-
-    @Transactional
-    fun removeOutlet(merchantId: Long, discountId: Long, outletId: Long) {
-        validateOwnership(merchantId, discountId)
-        discountOutletRepository.findByDiscountId(discountId)
-            .firstOrNull { it.outletId == outletId }
-            ?.let { discountOutletRepository.delete(it) }
-    }
-
-    // --- Helpers ---
-
-    private fun validateOwnership(merchantId: Long, discountId: Long) {
-        discountRepository.findById(discountId)
-            .filter { it.merchantId == merchantId }
-            .orElseThrow { ResourceNotFoundException("Discount not found") }
-    }
-
-    private fun bindOutlets(discountId: Long, merchantId: Long, outletIds: List<Long>) {
-        discountOutletRepository.saveAll(outletIds.map { outletId ->
-            DiscountOutlet().apply { this.discountId = discountId; this.outletId = outletId; this.merchantId = merchantId }
+    private fun saveBindings(
+        discountId: Long, merchantId: Long,
+        outletIds: List<Long>, productIds: List<Long>,
+        categoryIds: List<Long>, customerIds: List<Long>
+    ) {
+        discountOutletRepository.saveAll(outletIds.map { oid ->
+            DiscountOutlet().apply { this.discountId = discountId; this.outletId = oid; this.merchantId = merchantId }
+        })
+        discountProductRepository.saveAll(productIds.map { pid ->
+            DiscountProduct().apply { this.discountId = discountId; this.productId = pid; this.merchantId = merchantId }
+        })
+        discountCategoryRepository.saveAll(categoryIds.map { cid ->
+            DiscountCategory().apply { this.discountId = discountId; this.categoryId = cid; this.merchantId = merchantId }
+        })
+        discountCustomerRepository.saveAll(customerIds.map { cid ->
+            DiscountCustomer().apply { this.discountId = discountId; this.customerId = cid; this.merchantId = merchantId }
         })
     }
 
-    private fun bindProducts(discountId: Long, merchantId: Long, productIds: List<Long>) {
-        discountProductRepository.saveAll(productIds.map { productId ->
-            DiscountProduct().apply { this.discountId = discountId; this.productId = productId; this.merchantId = merchantId }
-        })
-    }
+    private fun Discount.toDetailResponse(): DiscountResponse = toResponse(
+        outlets = discountOutletRepository.findByDiscountId(id).map { it.outletId },
+        productIds = discountProductRepository.findByDiscountId(id).map { it.productId },
+        categoryIds = discountCategoryRepository.findByDiscountId(id).map { it.categoryId },
+        customerIds = discountCustomerRepository.findByDiscountId(id).map { it.customerId }
+    )
 
-    private fun bindCategories(discountId: Long, merchantId: Long, categoryIds: List<Long>) {
-        discountCategoryRepository.saveAll(categoryIds.map { categoryId ->
-            DiscountCategory().apply { this.discountId = discountId; this.categoryId = categoryId; this.merchantId = merchantId }
-        })
-    }
-
-    private fun Discount.toResponse(): DiscountResponse {
-        val outlets = discountOutletRepository.findByDiscountId(id).map { it.outletId }
-        val products = discountProductRepository.findByDiscountId(id).map { it.productId }
-        val categories = discountCategoryRepository.findByDiscountId(id).map { it.categoryId }
-        return DiscountResponse(
-            id = id, name = name, code = code, valueType = valueType, value = value,
-            maxDiscountAmount = maxDiscountAmount, minPurchase = minPurchase,
-            scope = scope, channel = channel, visibility = visibility,
-            usageLimit = usageLimit, usagePerCustomer = usagePerCustomer,
-            startDate = startDate, endDate = endDate, isActive = isActive,
-            outlets = outlets, productIds = products, categoryIds = categories,
-            createdDate = createdDate, modifiedDate = modifiedDate
-        )
-    }
+    private fun Discount.toResponse(
+        outlets: List<Long>,
+        productIds: List<Long>,
+        categoryIds: List<Long>,
+        customerIds: List<Long>
+    ) = DiscountResponse(
+        id = id, name = name, code = code, valueType = valueType, value = value,
+        maxDiscountAmount = maxDiscountAmount, minPurchase = minPurchase,
+        scope = scope, channel = channel, visibility = visibility,
+        usageLimit = usageLimit, usagePerCustomer = usagePerCustomer,
+        startDate = startDate, endDate = endDate, isActive = isActive,
+        outlets = outlets, productIds = productIds, categoryIds = categoryIds,
+        customerIds = customerIds, createdDate = createdDate, modifiedDate = modifiedDate
+    )
 }

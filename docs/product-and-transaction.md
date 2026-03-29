@@ -422,11 +422,24 @@ Tabel utama transaksi POS.
 | `trx_id` | varchar | Kode unik format `TRX-XXXXXXXX` (8 karakter UUID) |
 | `merchant_id` | bigint | FK → merchant |
 | `outlet_id` | bigint | FK → outlet tempat transaksi |
+| `customer_id` | bigint | FK → customer (nullable) |
+| `order_type_id` | bigint | FK → order_type (nullable) |
+| `cashier_shift_id` | bigint | FK → cashier_shift (nullable) |
 | `username` | varchar | Username kasir yang melakukan transaksi |
 | `status` | varchar | Status transaksi: `PAID` / `PENDING` / `CANCELLED` |
 | `payment_method` | varchar | Metode pembayaran (CASH, QRIS, dll) |
 | `price_include_tax` | boolean | Apakah harga di item sudah termasuk pajak |
-| `sub_total` | decimal | Total harga item sebelum tambahan |
+| `sub_total` | decimal | Net subtotal setelah semua diskon/promo |
+| `gross_sub_total` | decimal | Subtotal sebelum diskon/promo (Σ effectivePrice × qty) |
+| `promo_amount` | decimal | Total diskon dari promosi (Layer 2) |
+| `discount_amount` | decimal | Total diskon dari kode diskon (Layer 3) |
+| `discount_code` | varchar | Kode diskon yang digunakan |
+| `discount_id` | bigint | FK → discount yang digunakan |
+| `voucher_id` | bigint | FK → voucher (tabel voucher) yang digunakan |
+| `voucher_amount` | decimal | Nilai voucher yang dikreditkan |
+| `loyalty_points_earned` | decimal | Poin loyalty yang diperoleh dari transaksi ini |
+| `loyalty_points_redeemed` | decimal | Poin loyalty yang ditukar |
+| `loyalty_redeem_amount` | decimal | Nilai rupiah dari poin yang ditukar |
 | `total_service_charge` | decimal | Total service charge |
 | `total_tax` | decimal | Total pajak |
 | `total_rounding` | decimal | Total pembulatan |
@@ -587,34 +600,44 @@ GET /pos/transaction/detail/{transactionId}
 
 ### 2.4 Kalkulasi Harga
 
-Server **tidak menghitung** harga — semua nilai dikirim dari client (frontend/mobile). Server hanya menyimpan dan menampilkan. Berikut rumus yang diharapkan client ikuti:
+Kalkulasi dilakukan di **client** (frontend/mobile), kemudian nilai yang dihitung dikirim ke server. Server **memvalidasi** ulang semua nilai yang dikirim — jika ada ketidakcocokan, server mengembalikan HTTP **422** dengan detail field yang tidak cocok.
+
+Kalkulasi mengikuti **5 layer** berurutan:
 
 ```
-sub_total = Σ (price × qty) untuk semua item
-
-total_service_charge = sub_total × service_charge_percentage / 100
-                       (atau flat service_charge_amount)
-
-total_tax = sub_total × tax_percentage / 100
-            (atau per item jika is_taxable per produk)
-
-total_rounding = pembulatan ke rounding_target terdekat
-
-total_amount = sub_total + total_service_charge + total_tax + total_rounding
-
-cash_change = cash_tendered - total_amount  (hanya untuk pembayaran tunai)
+LAYER 1 — Price Book       → effectivePrice per item (override harga)
+LAYER 2 — Promotion        → promoAmount (auto-apply, tidak perlu kode)
+LAYER 3 — Discount Code    → discountAmount (input kode manual)
+─────────────────────────────────────────────────────────────────
+grossSubTotal = Σ(effectivePrice × qty)
+netSubTotal   = grossSubTotal - promoAmount - discountAmount
+─────────────────────────────────────────────────────────────────
+LAYER 4 — Voucher          → voucherAmount (kurangi totalAmount, bukan netSubTotal)
+LAYER 5 — Loyalty Redeem   → loyaltyRedeemAmount (kurangi totalAmount)
+─────────────────────────────────────────────────────────────────
+totalServiceCharge = netSubTotal × SC% (atau flat amount)
+totalTax           = (netSubTotal + SC) × tax%
+amountBeforeRound  = netSubTotal + SC + tax
+totalRounding      = pembulatan ke target terdekat
+totalAmount        = amountBeforeRound + rounding - voucherAmount - loyaltyRedeemAmount
+cashChange         = cashTendered - totalAmount
 ```
 
-**Contoh Kalkulasi:**
+> Lihat `docs/discount-simulation.md` untuk simulasi lengkap semua layer.
+
+**Contoh Kalkulasi (tanpa diskon/loyalty):**
 
 | Komponen | Nilai |
 |----------|-------|
 | Item: Kopi Susu × 2 @ Rp25.000 | Rp50.000 |
 | Item: Roti Bakar × 1 @ Rp15.000 | Rp15.000 |
-| **Sub Total** | **Rp65.000** |
+| **Gross Sub Total** | **Rp65.000** |
+| Promo Amount | Rp0 |
+| Discount Amount | Rp0 |
+| **Net Sub Total** | **Rp65.000** |
 | Service Charge 5% | Rp3.250 |
 | Pajak PPN 11% | Rp7.150 |
-| Rounding (ke 100 terdekat) | Rp-0 (sudah bulat) |
+| Rounding (ke 100 terdekat) | Rp0 |
 | **Total Amount** | **Rp75.400** |
 | Cash Tendered | Rp80.000 |
 | **Cash Change** | **Rp4.600** |
@@ -721,6 +744,15 @@ cash_change = cash_tendered - total_amount  (hanya untuk pembayaran tunai)
 ```json
 {
   "subTotal": 65000,
+  "grossSubTotal": 65000,
+  "promoAmount": 0,
+  "discountAmount": 0,
+  "discountCode": null,
+  "voucherCode": null,
+  "voucherAmount": 0,
+  "loyaltyRedeemPoints": null,
+  "loyaltyRedeemMode": null,
+  "loyaltyRedeemAmount": 0,
   "totalServiceCharge": 3250,
   "totalTax": 7150,
   "totalRounding": 0,
@@ -729,6 +761,8 @@ cash_change = cash_tendered - total_amount  (hanya untuk pembayaran tunai)
   "cashTendered": 80000,
   "cashChange": 4600,
   "priceIncludeTax": false,
+  "customerId": null,
+  "orderTypeId": null,
   "queueNumber": null,
   "transactionItems": [
     {
@@ -737,6 +771,7 @@ cash_change = cash_tendered - total_amount  (hanya untuk pembayaran tunai)
       "price": 25000,
       "qty": 2,
       "totalPrice": 50000,
+      "discountAmount": 0,
       "taxId": 1,
       "taxAmount": 5500
     },
@@ -746,6 +781,7 @@ cash_change = cash_tendered - total_amount  (hanya untuk pembayaran tunai)
       "price": 15000,
       "qty": 1,
       "totalPrice": 15000,
+      "discountAmount": 0,
       "taxId": 1,
       "taxAmount": 1650
     }
@@ -755,14 +791,25 @@ cash_change = cash_tendered - total_amount  (hanya untuk pembayaran tunai)
 
 | Field | Wajib | Keterangan |
 |-------|-------|-----------|
-| `subTotal` | ✓ | Total sebelum pajak & service charge |
+| `subTotal` | ✓ | Net subtotal = grossSubTotal - promoAmount - discountAmount |
+| `grossSubTotal` | ✓ | Σ(effectivePrice × qty) sebelum diskon/promo |
 | `totalAmount` | ✓ | Jumlah final yang dibayar |
 | `paymentMethod` | ✓ | Kode metode pembayaran |
+| `promoAmount` | - | Total diskon dari promosi. Default `0` |
+| `discountAmount` | - | Total diskon dari kode diskon. Default `0` |
+| `discountCode` | - | Kode diskon yang digunakan |
+| `voucherCode` | - | Kode voucher yang digunakan |
+| `voucherAmount` | - | Nilai voucher (dikurangi dari totalAmount). Default `0` |
+| `loyaltyRedeemPoints` | - | Jumlah poin yang ingin ditukar |
+| `loyaltyRedeemMode` | - | `PAYMENT` (kurangi totalAmount) atau `DISCOUNT` (kurangi netSubTotal) |
+| `loyaltyRedeemAmount` | - | Nilai rupiah dari poin yang ditukar. Default `0` |
 | `totalServiceCharge` | - | Default `0` |
 | `totalTax` | - | Default `0` |
 | `totalRounding` | - | Default `0` |
 | `cashTendered` | - | Wajib diisi jika pembayaran tunai |
 | `cashChange` | - | Wajib diisi jika pembayaran tunai |
+| `customerId` | - | ID customer (untuk loyalty earn/redeem) |
+| `orderTypeId` | - | ID order type (untuk Price Book ORDER_TYPE) |
 | `priceIncludeTax` | - | Default `false` |
 | `queueNumber` | - | Jika `null`, sistem generate otomatis |
 | `transactionItems` | ✓ | Minimal 1 item |

@@ -22,12 +22,10 @@ data class CreateDiscountRequest(
     val startDate: LocalDateTime? = null,
     val endDate: LocalDateTime? = null,
     val isActive: Boolean = true,
-    /** Langsung bind outlet saat create (jika visibility=SPECIFIC_OUTLET) */
     val outletIds: List<Long> = emptyList(),
-    /** Langsung bind produk saat create (jika scope=PRODUCT) */
     val productIds: List<Long> = emptyList(),
-    /** Langsung bind kategori saat create (jika scope=CATEGORY) */
-    val categoryIds: List<Long> = emptyList()
+    val categoryIds: List<Long> = emptyList(),
+    val customerIds: List<Long> = emptyList()
 )
 
 data class UpdateDiscountRequest(
@@ -45,5 +43,17 @@ data class UpdateDiscountRequest(
     val usagePerCustomer: Int? = null,
     val startDate: LocalDateTime? = null,
     val endDate: LocalDateTime? = null,
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+    /** Full-replace: binding lama dihapus, diganti dengan list ini */
+    val outletIds: List<Long> = emptyList(),
+    val productIds: List<Long> = emptyList(),
+    val categoryIds: List<Long> = emptyList(),
+    val customerIds: List<Long> = emptyList()
+)
+
+data class ValidateDiscountRequest(
+    val code: String,
+    val outletId: Long? = null,
+    val customerId: Long? = null,
+    val grossSubTotal: BigDecimal
 )

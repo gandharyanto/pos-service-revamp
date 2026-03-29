@@ -4,6 +4,9 @@ import id.nahsbyte.pos_service_revamp.dto.request.CreateTransactionRequest
 import id.nahsbyte.pos_service_revamp.dto.request.UpdateTransactionRequest
 import id.nahsbyte.pos_service_revamp.dto.response.*
 import id.nahsbyte.pos_service_revamp.entity.*
+import id.nahsbyte.pos_service_revamp.repository.VoucherRepository
+import id.nahsbyte.pos_service_revamp.repository.VoucherGroupRepository
+import id.nahsbyte.pos_service_revamp.repository.VoucherUsageRepository
 import id.nahsbyte.pos_service_revamp.dto.response.MismatchDetail
 import id.nahsbyte.pos_service_revamp.exception.AmountMismatchException
 import id.nahsbyte.pos_service_revamp.exception.ResourceNotFoundException
@@ -45,7 +48,15 @@ class TransactionService(
     private val discountProductRepository: DiscountProductRepository,
     private val discountCategoryRepository: DiscountCategoryRepository,
     private val discountOutletRepository: DiscountOutletRepository,
-    private val discountCustomerRepository: DiscountCustomerRepository
+    private val discountCustomerRepository: DiscountCustomerRepository,
+    // Voucher
+    private val voucherRepository: VoucherRepository,
+    private val voucherGroupRepository: VoucherGroupRepository,
+    private val voucherUsageRepository: VoucherUsageRepository,
+    // Loyalty
+    private val loyaltyService: LoyaltyService,
+    private val loyaltyProgramRepository: LoyaltyProgramRepository,
+    private val customerRepository: CustomerRepository
 ) {
 
     fun list(
@@ -202,19 +213,50 @@ class TransactionService(
             setting = paymentSetting
         )
 
-        val cashChange = request.cashTendered?.subtract(calculated.totalAmount)
+        // -----------------------------------------------------------------------
+        // LAYER 4 — VOUCHER (payment instrument, bukan diskon)
+        // Voucher mengurangi totalAmount dari sisi pembayaran.
+        // Tax dan SC sudah dihitung dari total penuh — tidak berubah.
+        // -----------------------------------------------------------------------
+        val voucherResult = resolveVoucher(
+            code = request.voucherCode,
+            totalAmount = calculated.totalAmount,
+            merchantId = merchantId,
+            outletId = outlet.id,
+            customerId = request.customerId,
+            channel = channel,
+            now = now
+        )
+
+        // -----------------------------------------------------------------------
+        // LAYER 5 — LOYALTY (redeem poin sebagai payment atau diskon)
+        // -----------------------------------------------------------------------
+        val loyaltyResult = resolveLoyaltyRedeem(
+            request = request,
+            merchantId = merchantId,
+            netSubTotal = netSubTotal,
+            totalAmount = calculated.totalAmount
+        )
+
+        // Amount yang harus dibayar setelah voucher + loyalty redeem payment
+        val amountAfterVoucher = calculated.totalAmount
+            .subtract(voucherResult.voucherAmount)
+            .subtract(loyaltyResult.redeemPaymentAmount)
+            .coerceAtLeast(BigDecimal.ZERO)
+
+        val cashChange = request.cashTendered?.subtract(amountAfterVoucher)
             ?.let { if (it < BigDecimal.ZERO) BigDecimal.ZERO else it }
 
         // -----------------------------------------------------------------------
         // VALIDATE REQUEST vs SERVER-CALCULATED
         // -----------------------------------------------------------------------
-        validateAgainstRequest(request, resolvedItems, calculated, cashChange, promoResult, discountCodeResult)
+        validateAgainstRequest(request, resolvedItems, calculated, cashChange, promoResult, discountCodeResult, voucherResult, loyaltyResult)
 
         if (request.paymentMethod.uppercase() == "CASH") {
             val tendered = request.cashTendered
                 ?: throw IllegalArgumentException("cashTendered is required for CASH payment")
-            require(tendered >= calculated.totalAmount) {
-                "Cash tendered ($tendered) is less than total amount (${calculated.totalAmount})"
+            require(tendered >= amountAfterVoucher) {
+                "Cash tendered ($tendered) is less than amount after voucher ($amountAfterVoucher)"
             }
         }
 
@@ -270,6 +312,9 @@ class TransactionService(
             orderTypeId = request.orderTypeId
             discountId = discountCodeResult.discountId
             promoId = promoResult.primaryPromoId
+            voucherAmount = if (voucherResult.voucherAmount > BigDecimal.ZERO) voucherResult.voucherAmount else null
+            loyaltyPointsRedeemed = if (loyaltyResult.redeemPoints > BigDecimal.ZERO) loyaltyResult.redeemPoints else null
+            loyaltyRedeemAmount = if (loyaltyResult.redeemPaymentAmount > BigDecimal.ZERO) loyaltyResult.redeemPaymentAmount else null
             queueId = savedQueue.id
             createdBy = username
             createdDate = now
@@ -309,6 +354,67 @@ class TransactionService(
             }
         }
         transactionItemRepository.saveAll(items)
+
+        // -----------------------------------------------------------------------
+        // MARK VOUCHER AS USED
+        // -----------------------------------------------------------------------
+        if (voucherResult.voucherId != null) {
+            val voucherCode = voucherRepository.findById(voucherResult.voucherId!!).orElse(null)
+            voucherCode?.apply {
+                status = "USED"
+                usedDate = now
+                transactionId = savedTrx.id
+                usedCount += 1
+            }?.let { voucherRepository.save(it) }
+
+            voucherUsageRepository.save(VoucherUsage().apply {
+                voucherId = voucherResult.voucherId!!
+                transactionId = savedTrx.id
+                this.merchantId = merchantId
+                customerId = request.customerId
+                amount = voucherResult.voucherAmount
+                usedDate = now
+            })
+        }
+
+        // -----------------------------------------------------------------------
+        // LOYALTY: debit redeem points + credit earned points
+        // -----------------------------------------------------------------------
+        if (request.customerId != null) {
+            val loyaltyProgram = loyaltyProgramRepository.findByMerchantIdAndIsActiveTrue(merchantId).orElse(null)
+            if (loyaltyProgram != null) {
+                // Debit redeem (jika ada)
+                if (loyaltyResult.redeemPoints > BigDecimal.ZERO) {
+                    val redeemType = if (loyaltyResult.redeemMode == "PAYMENT") "REDEEM_PAYMENT" else "REDEEM_DISCOUNT"
+                    loyaltyService.debitRedeemedPoints(
+                        merchantId, request.customerId!!, savedTrx.id,
+                        loyaltyResult.redeemPoints, redeemType, username
+                    )
+                }
+
+                // Kredit earn (hitung berdasarkan kontribusi per item)
+                val itemContributions = resolvedItems.map { item ->
+                    Pair(item.product.id, item.effectivePrice.multiply(BigDecimal(item.qty)))
+                }
+                val earnedPoints = loyaltyService.calculateEarnedPoints(merchantId, netSubTotal, itemContributions)
+                if (earnedPoints > BigDecimal.ZERO) {
+                    loyaltyService.creditEarnedPoints(
+                        merchantId, request.customerId!!, savedTrx.id,
+                        earnedPoints, loyaltyProgram.id, username
+                    )
+                    // Update field di transaksi
+                    savedTrx.loyaltyPointsEarned = earnedPoints
+                    transactionRepository.save(savedTrx)
+                }
+
+                // Update customer stats
+                val customer = customerRepository.findById(request.customerId!!).orElse(null)
+                customer?.apply {
+                    totalTransaction += 1
+                    totalSpend = totalSpend.add(calculated.totalAmount)
+                }?.let { customerRepository.save(it) }
+            }
+        }
 
         return CreateTransactionResponse(
             id = savedTrx.id,
@@ -797,7 +903,9 @@ class TransactionService(
         calculated: CalculatedAmounts,
         cashChange: BigDecimal?,
         promoResult: PromotionResult,
-        discountCodeResult: DiscountCodeResult
+        discountCodeResult: DiscountCodeResult,
+        voucherResult: VoucherResult,
+        loyaltyResult: LoyaltyRedeemResult = LoyaltyRedeemResult()
     ) {
         val mismatches = mutableListOf<MismatchDetail>()
 
@@ -812,7 +920,10 @@ class TransactionService(
         check("totalServiceCharge", request.totalServiceCharge, calculated.totalServiceCharge)
         check("totalTax",           request.totalTax,           calculated.totalTax)
         check("totalRounding",      request.totalRounding,      calculated.totalRounding)
-        check("totalAmount",        request.totalAmount,        calculated.totalAmount)
+        check("totalAmount",    request.totalAmount,    calculated.totalAmount)
+        check("voucherAmount",  request.voucherAmount,  voucherResult.voucherAmount)
+        if (request.loyaltyRedeemMode == "PAYMENT")
+            check("loyaltyRedeemAmount", request.loyaltyRedeemAmount, loyaltyResult.redeemPaymentAmount)
         if (request.cashTendered != null && cashChange != null)
             check("cashChange", request.cashChange, cashChange)
 
@@ -839,6 +950,111 @@ class TransactionService(
     // =========================================================================
     // UTILITIES
     // =========================================================================
+
+    // =========================================================================
+    // LAYER 4 — VOUCHER PAYMENT
+    // =========================================================================
+
+    private data class VoucherResult(
+        val voucherId: Long?,
+        val voucherAmount: BigDecimal
+    )
+
+    // =========================================================================
+    // LAYER 5 — LOYALTY REDEEM
+    // =========================================================================
+
+    private data class LoyaltyRedeemResult(
+        val redeemPoints: BigDecimal = BigDecimal.ZERO,
+        val redeemPaymentAmount: BigDecimal = BigDecimal.ZERO,   // nilai rupiah (mode PAYMENT)
+        val redeemDiscountAmount: BigDecimal = BigDecimal.ZERO,  // diskon (mode DISCOUNT)
+        val redeemMode: String = "NONE"  // PAYMENT | DISCOUNT | NONE
+    )
+
+    private fun resolveLoyaltyRedeem(
+        request: CreateTransactionRequest,
+        merchantId: Long,
+        netSubTotal: BigDecimal,
+        totalAmount: BigDecimal
+    ): LoyaltyRedeemResult {
+        val requestedPoints = request.loyaltyRedeemPoints ?: return LoyaltyRedeemResult()
+        if (requestedPoints <= BigDecimal.ZERO) return LoyaltyRedeemResult()
+        val customerId = request.customerId ?: return LoyaltyRedeemResult()
+
+        val program = loyaltyProgramRepository.findByMerchantIdAndIsActiveTrue(merchantId).orElse(null)
+            ?: return LoyaltyRedeemResult()
+
+        val customer = customerRepository.findById(customerId).orElse(null)
+            ?: return LoyaltyRedeemResult()
+
+        val mode = request.loyaltyRedeemMode ?: "PAYMENT"
+
+        return when (mode.uppercase()) {
+            "PAYMENT" -> {
+                val (pts, rupiah) = loyaltyService.calculateRedeemAsPayment(
+                    merchantId, program.id, requestedPoints, totalAmount, customer.loyaltyPoints
+                )
+                LoyaltyRedeemResult(redeemPoints = pts, redeemPaymentAmount = rupiah, redeemMode = "PAYMENT")
+            }
+            "DISCOUNT" -> {
+                val (pts, discount) = loyaltyService.calculateRedeemAsDiscount(merchantId, program.id, netSubTotal)
+                LoyaltyRedeemResult(redeemPoints = pts, redeemDiscountAmount = discount, redeemMode = "DISCOUNT")
+            }
+            else -> LoyaltyRedeemResult()
+        }
+    }
+
+    private fun resolveVoucher(
+        code: String?,
+        totalAmount: BigDecimal,
+        merchantId: Long,
+        outletId: Long,
+        customerId: Long?,
+        channel: String,
+        now: LocalDateTime
+    ): VoucherResult {
+        val empty = VoucherResult(null, BigDecimal.ZERO)
+        if (code.isNullOrBlank()) return empty
+
+        val voucher = voucherRepository.findByCodeAndMerchantId(code, merchantId)
+            .orElseThrow { IllegalArgumentException("Voucher code '$code' is not valid") }
+
+        // Harus punya group_id (new-style voucher)
+        val groupId = voucher.groupId
+            ?: throw IllegalArgumentException("Voucher code '$code' is not a valid payment voucher")
+
+        val group = voucherGroupRepository.findById(groupId)
+            .orElseThrow { IllegalArgumentException("Voucher group not found") }
+
+        // Validasi status
+        val currentStatus = voucher.status
+        if (currentStatus != null && currentStatus != "AVAILABLE")
+            throw IllegalArgumentException("Voucher code '$code' has already been $currentStatus")
+        if (!voucher.isActive || !group.isActive)
+            throw IllegalArgumentException("Voucher code '$code' is not active")
+
+        // Validasi expiry (group level)
+        if (group.expiredDate != null && now.isAfter(group.expiredDate!!))
+            throw IllegalArgumentException("Voucher code '$code' has expired")
+
+        // Validasi valid_days
+        val dayOfWeek = now.dayOfWeek.name.take(3).uppercase()
+        if (group.validDays != null && dayOfWeek !in group.validDays!!.split(",").map { it.trim() })
+            throw IllegalArgumentException("Voucher code '$code' is not valid today")
+
+        // Validasi channel
+        if (group.channel != "BOTH" && group.channel != channel)
+            throw IllegalArgumentException("Voucher code '$code' is not valid for channel $channel")
+
+        // Validasi customer requirement
+        if (group.isRequiredCustomer && customerId == null)
+            throw IllegalArgumentException("Voucher code '$code' requires a registered customer")
+
+        // Nilai voucher = min(group.sellingPrice, totalAmount)
+        val voucherAmount = group.sellingPrice.min(totalAmount)
+
+        return VoucherResult(voucher.id, voucherAmount)
+    }
 
     private fun computeDiscount(value: BigDecimal, valueType: String, base: BigDecimal): BigDecimal =
         when (valueType.uppercase()) {

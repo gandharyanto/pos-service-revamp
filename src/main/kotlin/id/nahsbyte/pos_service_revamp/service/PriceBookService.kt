@@ -7,7 +7,6 @@ import id.nahsbyte.pos_service_revamp.exception.ResourceNotFoundException
 import id.nahsbyte.pos_service_revamp.repository.*
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import java.time.LocalDateTime
 
 @Service
 class PriceBookService(
@@ -17,17 +16,42 @@ class PriceBookService(
     private val priceBookOutletRepository: PriceBookOutletRepository
 ) {
 
-    fun list(merchantId: Long): List<PriceBookResponse> =
-        priceBookRepository.findByMerchantIdAndIsActiveTrue(merchantId).map { it.toResponse() }
+    fun list(
+        merchantId: Long,
+        isActive: Boolean? = null,
+        type: String? = null,
+        isDefault: Boolean? = null
+    ): List<PriceBookResponse> {
+        var books = priceBookRepository.findByMerchantId(merchantId)
+        if (isActive != null) books = books.filter { it.isActive == isActive }
+        if (type != null) books = books.filter { it.type == type }
+        if (isDefault != null) books = books.filter { it.isDefault == isDefault }
 
-    fun detail(merchantId: Long, priceBookId: Long): PriceBookResponse =
-        priceBookRepository.findById(priceBookId)
+        if (books.isEmpty()) return emptyList()
+
+        val ids = books.map { it.id }
+        val outletMap = priceBookOutletRepository.findByPriceBookIdIn(ids).groupBy { it.priceBookId }
+        val itemMap = priceBookItemRepository.findByPriceBookIdIn(ids).groupBy { it.priceBookId }
+        val tierMap = priceBookWholesaleTierRepository.findByPriceBookIdIn(ids).groupBy { it.priceBookId }
+
+        return books.map { pb ->
+            pb.toResponse(
+                outlets = outletMap[pb.id]?.map { it.outletId } ?: emptyList(),
+                items = itemMap[pb.id]?.map { PriceBookItemResponse(it.id, it.productId, it.price, it.isActive) } ?: emptyList(),
+                tiers = tierMap[pb.id]?.map { it.toTierResponse() } ?: emptyList()
+            )
+        }
+    }
+
+    fun detail(merchantId: Long, id: Long): PriceBookResponse =
+        priceBookRepository.findById(id)
             .filter { it.merchantId == merchantId }
-            .map { it.toResponse() }
             .orElseThrow { ResourceNotFoundException("Price book not found") }
+            .toDetailResponse()
 
     @Transactional
-    fun create(merchantId: Long, username: String, request: CreatePriceBookRequest): PriceBookResponse {
+    fun create(merchantId: Long, request: CreatePriceBookRequest): PriceBookResponse {
+        if (request.isDefault) clearDefault(merchantId, request.type)
         val priceBook = PriceBook().apply {
             this.merchantId = merchantId
             name = request.name
@@ -39,22 +63,18 @@ class PriceBookService(
             visibility = request.visibility
             isDefault = request.isDefault
             isActive = request.isActive
-            createdBy = username
-            createdDate = LocalDateTime.now()
-            modifiedBy = username
-            modifiedDate = LocalDateTime.now()
         }
-        val saved = priceBookRepository.save(priceBook)
-        if (request.outletIds.isNotEmpty()) bindOutlets(saved.id, merchantId, request.outletIds)
-        return saved.toResponse()
+        priceBookRepository.save(priceBook)
+        saveBindings(priceBook.id, merchantId, request.outletIds, request.items, request.wholesaleTiers)
+        return priceBook.toDetailResponse()
     }
 
     @Transactional
-    fun update(merchantId: Long, username: String, request: UpdatePriceBookRequest): PriceBookResponse {
+    fun update(merchantId: Long, request: UpdatePriceBookRequest): PriceBookResponse {
         val priceBook = priceBookRepository.findById(request.id)
             .filter { it.merchantId == merchantId }
             .orElseThrow { ResourceNotFoundException("Price book not found") }
-
+        if (request.isDefault && !priceBook.isDefault) clearDefault(merchantId, request.type)
         priceBook.apply {
             name = request.name
             type = request.type
@@ -65,135 +85,74 @@ class PriceBookService(
             visibility = request.visibility
             isDefault = request.isDefault
             isActive = request.isActive
-            modifiedBy = username
-            modifiedDate = LocalDateTime.now()
         }
-        return priceBookRepository.save(priceBook).toResponse()
+        priceBookRepository.save(priceBook)
+        priceBookOutletRepository.deleteAllByPriceBookId(priceBook.id)
+        priceBookItemRepository.deleteAllByPriceBookId(priceBook.id)
+        priceBookWholesaleTierRepository.deleteAllByPriceBookId(priceBook.id)
+        saveBindings(priceBook.id, merchantId, request.outletIds, request.items, request.wholesaleTiers)
+        return priceBook.toDetailResponse()
     }
 
-    fun delete(merchantId: Long, priceBookId: Long) {
-        val priceBook = priceBookRepository.findById(priceBookId)
+    @Transactional
+    fun delete(merchantId: Long, id: Long) {
+        val priceBook = priceBookRepository.findById(id)
             .filter { it.merchantId == merchantId }
             .orElseThrow { ResourceNotFoundException("Price book not found") }
+        priceBookOutletRepository.deleteAllByPriceBookId(id)
+        priceBookItemRepository.deleteAllByPriceBookId(id)
+        priceBookWholesaleTierRepository.deleteAllByPriceBookId(id)
         priceBookRepository.delete(priceBook)
     }
 
-    // --- Price Book Item (PRODUCT / ORDER_TYPE type) ---
+    private fun clearDefault(merchantId: Long, type: String) {
+        priceBookRepository.findByMerchantIdAndTypeAndIsDefaultTrue(merchantId, type).forEach { pb ->
+            pb.isDefault = false
+            priceBookRepository.save(pb)
+        }
+    }
 
-    @Transactional
-    fun addItem(merchantId: Long, username: String, priceBookId: Long, request: AddPriceBookItemRequest): PriceBookItemResponse {
-        validateOwnership(merchantId, priceBookId)
-        val existing = priceBookItemRepository.findByPriceBookIdAndProductId(priceBookId, request.productId)
-        val item = existing.orElse(PriceBookItem()).apply {
-            this.priceBookId = priceBookId
-            this.productId = request.productId
-            this.merchantId = merchantId
-            price = request.price
-            isActive = request.isActive
-            if (id == 0L) {
-                createdBy = username
-                createdDate = LocalDateTime.now()
+    private fun saveBindings(
+        priceBookId: Long, merchantId: Long,
+        outletIds: List<Long>,
+        items: List<PriceBookItemData>,
+        tiers: List<PriceBookTierData>
+    ) {
+        priceBookOutletRepository.saveAll(outletIds.map { oid ->
+            PriceBookOutlet().apply { this.priceBookId = priceBookId; this.outletId = oid; this.merchantId = merchantId }
+        })
+        priceBookItemRepository.saveAll(items.map { item ->
+            PriceBookItem().apply {
+                this.priceBookId = priceBookId; this.productId = item.productId
+                this.merchantId = merchantId; price = item.price; isActive = item.isActive
             }
-            modifiedBy = username
-            modifiedDate = LocalDateTime.now()
-        }
-        val saved = priceBookItemRepository.save(item)
-        return PriceBookItemResponse(saved.id, saved.productId, saved.price, saved.isActive)
-    }
-
-    fun deleteItem(merchantId: Long, priceBookId: Long, productId: Long) {
-        validateOwnership(merchantId, priceBookId)
-        priceBookItemRepository.findByPriceBookIdAndProductId(priceBookId, productId)
-            .ifPresent { priceBookItemRepository.delete(it) }
-    }
-
-    // --- Wholesale Tiers (WHOLESALE type) ---
-
-    @Transactional
-    fun addWholesaleTier(merchantId: Long, username: String, priceBookId: Long, request: AddWholesaleTierRequest): WholesaleTierResponse {
-        validateOwnership(merchantId, priceBookId)
-        val tier = PriceBookWholesaleTier().apply {
-            this.priceBookId = priceBookId
-            this.productId = request.productId
-            this.merchantId = merchantId
-            minQty = request.minQty
-            maxQty = request.maxQty
-            price = request.price
-            displayOrder = request.displayOrder
-        }
-        val saved = priceBookWholesaleTierRepository.save(tier)
-        return saved.toTierResponse()
-    }
-
-    @Transactional
-    fun updateWholesaleTier(merchantId: Long, priceBookId: Long, request: UpdateWholesaleTierRequest): WholesaleTierResponse {
-        validateOwnership(merchantId, priceBookId)
-        val tier = priceBookWholesaleTierRepository.findById(request.tierId)
-            .filter { it.priceBookId == priceBookId }
-            .orElseThrow { ResourceNotFoundException("Tier not found") }
-
-        tier.apply {
-            minQty = request.minQty
-            maxQty = request.maxQty
-            price = request.price
-            displayOrder = request.displayOrder
-        }
-        return priceBookWholesaleTierRepository.save(tier).toTierResponse()
-    }
-
-    fun deleteWholesaleTier(merchantId: Long, priceBookId: Long, tierId: Long) {
-        validateOwnership(merchantId, priceBookId)
-        priceBookWholesaleTierRepository.findById(tierId)
-            .filter { it.priceBookId == priceBookId }
-            .ifPresent { priceBookWholesaleTierRepository.delete(it) }
-    }
-
-    // --- Outlet binding ---
-
-    @Transactional
-    fun addOutlets(merchantId: Long, priceBookId: Long, outletIds: List<Long>) {
-        validateOwnership(merchantId, priceBookId)
-        val existing = priceBookOutletRepository.findByPriceBookId(priceBookId).map { it.outletId }.toSet()
-        bindOutlets(priceBookId, merchantId, outletIds.filter { it !in existing })
-    }
-
-    fun removeOutlet(merchantId: Long, priceBookId: Long, outletId: Long) {
-        validateOwnership(merchantId, priceBookId)
-        priceBookOutletRepository.findByPriceBookId(priceBookId)
-            .firstOrNull { it.outletId == outletId }
-            ?.let { priceBookOutletRepository.delete(it) }
-    }
-
-    // --- Helpers ---
-
-    private fun validateOwnership(merchantId: Long, priceBookId: Long) {
-        priceBookRepository.findById(priceBookId)
-            .filter { it.merchantId == merchantId }
-            .orElseThrow { ResourceNotFoundException("Price book not found") }
-    }
-
-    private fun bindOutlets(priceBookId: Long, merchantId: Long, outletIds: List<Long>) {
-        priceBookOutletRepository.saveAll(outletIds.map { outletId ->
-            PriceBookOutlet().apply { this.priceBookId = priceBookId; this.outletId = outletId; this.merchantId = merchantId }
+        })
+        priceBookWholesaleTierRepository.saveAll(tiers.map { tier ->
+            PriceBookWholesaleTier().apply {
+                this.priceBookId = priceBookId; this.productId = tier.productId
+                this.merchantId = merchantId; minQty = tier.minQty; maxQty = tier.maxQty
+                price = tier.price; displayOrder = tier.displayOrder
+            }
         })
     }
 
-    private fun PriceBook.toResponse(): PriceBookResponse {
-        val pbId = id
-        val outlets = priceBookOutletRepository.findByPriceBookId(pbId).map { it.outletId }
-        val items = priceBookItemRepository.findByPriceBookIdIn(listOf(pbId))
-            .map { PriceBookItemResponse(it.id, it.productId, it.price, it.isActive) }
-        val tiers = priceBookWholesaleTierRepository.findByPriceBookIdInAndProductId(listOf(pbId), 0)
-            .let { priceBookWholesaleTierRepository.findAll().filter { t -> t.priceBookId == pbId } }
-            .map { it.toTierResponse() }
-        return PriceBookResponse(
-            id = pbId, name = name, type = type, orderTypeId = orderTypeId,
-            categoryId = categoryId, adjustmentType = adjustmentType, adjustmentValue = adjustmentValue,
-            visibility = visibility, isDefault = isDefault, isActive = isActive,
-            outlets = outlets, items = items, wholesaleTiers = tiers,
-            createdDate = createdDate, modifiedDate = modifiedDate
-        )
-    }
+    private fun PriceBook.toDetailResponse(): PriceBookResponse = toResponse(
+        outlets = priceBookOutletRepository.findByPriceBookId(id).map { it.outletId },
+        items = priceBookItemRepository.findByPriceBookId(id).map { PriceBookItemResponse(it.id, it.productId, it.price, it.isActive) },
+        tiers = priceBookWholesaleTierRepository.findByPriceBookId(id).map { it.toTierResponse() }
+    )
+
+    private fun PriceBook.toResponse(
+        outlets: List<Long>,
+        items: List<PriceBookItemResponse>,
+        tiers: List<WholesaleTierResponse>
+    ) = PriceBookResponse(
+        id = id, name = name, type = type, orderTypeId = orderTypeId,
+        categoryId = categoryId, adjustmentType = adjustmentType, adjustmentValue = adjustmentValue,
+        visibility = visibility, isDefault = isDefault, isActive = isActive,
+        outlets = outlets, items = items, wholesaleTiers = tiers,
+        createdDate = createdDate, modifiedDate = modifiedDate
+    )
 
     private fun PriceBookWholesaleTier.toTierResponse() =
         WholesaleTierResponse(id, productId, minQty, maxQty, price, displayOrder)

@@ -15,7 +15,11 @@ data class CreatePriceBookRequest(
     val visibility: String = "ALL_OUTLET",
     val isDefault: Boolean = false,
     val isActive: Boolean = true,
-    val outletIds: List<Long> = emptyList()
+    val outletIds: List<Long> = emptyList(),
+    /** Untuk type=PRODUCT atau ORDER_TYPE */
+    val items: List<PriceBookItemData> = emptyList(),
+    /** Untuk type=WHOLESALE */
+    val wholesaleTiers: List<PriceBookTierData> = emptyList()
 )
 
 data class UpdatePriceBookRequest(
@@ -28,25 +32,21 @@ data class UpdatePriceBookRequest(
     val adjustmentValue: BigDecimal? = null,
     val visibility: String = "ALL_OUTLET",
     val isDefault: Boolean = false,
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+    /** Full-replace: binding lama dihapus, diganti dengan list ini */
+    val outletIds: List<Long> = emptyList(),
+    val items: List<PriceBookItemData> = emptyList(),
+    val wholesaleTiers: List<PriceBookTierData> = emptyList()
 )
 
-data class AddPriceBookItemRequest(
+data class PriceBookItemData(
     val productId: Long,
     val price: BigDecimal,
     val isActive: Boolean = true
 )
 
-data class AddWholesaleTierRequest(
+data class PriceBookTierData(
     val productId: Long,
-    val minQty: Int,
-    val maxQty: Int? = null,
-    val price: BigDecimal,
-    val displayOrder: Int? = null
-)
-
-data class UpdateWholesaleTierRequest(
-    val tierId: Long,
     val minQty: Int,
     val maxQty: Int? = null,
     val price: BigDecimal,
