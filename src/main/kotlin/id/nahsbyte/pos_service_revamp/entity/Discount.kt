@@ -18,10 +18,25 @@ class Discount : BaseAuditEntity() {
 
     /**
      * Cara diskon dipicu:
-     * TRANSACTION — diskon langsung ke total transaksi
-     * ITEM_QTY    — diskon bertingkat berdasarkan qty item tertentu
+     * TRANSACTION   — diskon flat ke total transaksi
+     * ITEM_QTY      — diskon bertingkat berdasarkan qty item (via discount_tier)
+     * ITEM_SUBTOTAL — diskon bertingkat berdasarkan subtotal item (via discount_tier)
      */
     var type: String = "TRANSACTION"
+
+    /**
+     * Cara diskon diaplikasikan:
+     * AUTO   — otomatis jika kondisi terpenuhi
+     * MANUAL — kasir pilih manual
+     */
+    @Column(name = "apply_mode", nullable = false)
+    var applyMode: String = "MANUAL"
+
+    /**
+     * Boleh digabung dengan diskon lain dalam satu transaksi.
+     * false = hanya satu diskon yang berlaku (exclusive)
+     */
+    var stackable: Boolean = false
 
     /**
      * Tipe nilai diskon (untuk type=TRANSACTION):
@@ -31,19 +46,15 @@ class Discount : BaseAuditEntity() {
     var valueType: String = "PERCENTAGE"
 
     /**
-     * Nilai diskon (untuk type=TRANSACTION).
-     * Untuk type=ITEM_QTY, nilai per tier disimpan di tabel discount_tier.
+     * Nilai diskon (untuk type=TRANSACTION, flat).
+     * Untuk ITEM_QTY dan ITEM_SUBTOTAL, nilai per tier di tabel discount_tier.
      */
     var value: BigDecimal = BigDecimal.ZERO
 
     /**
-     * Untuk type=ITEM_QTY: produk mana yang qty-nya dihitung.
-     * Null = berlaku untuk total qty semua item di transaksi.
+     * Trigger untuk AUTO+TRANSACTION: minimum total transaksi.
+     * Null = tidak ada minimum.
      */
-    @Column(name = "product_id")
-    var productId: Long? = null
-
-    /** Minimum purchase amount to apply discount (untuk type=TRANSACTION) */
     @Column(name = "min_purchase")
     var minPurchase: BigDecimal? = null
 

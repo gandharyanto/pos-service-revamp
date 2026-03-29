@@ -4,13 +4,20 @@ import jakarta.persistence.*
 import java.math.BigDecimal
 
 /**
- * Tier untuk diskon tipe ITEM_QTY.
- * Setiap tier mendefinisikan rentang qty dan nilai diskon yang berlaku.
+ * Tier untuk diskon tipe ITEM_QTY dan ITEM_SUBTOTAL.
  *
- * Contoh:
- *   min_qty=1,  max_qty=2,    value_type=PERCENTAGE, value=0
- *   min_qty=3,  max_qty=5,    value_type=PERCENTAGE, value=10
- *   min_qty=6,  max_qty=null, value_type=PERCENTAGE, value=20
+ * ITEM_QTY      — min_val/max_val = rentang qty (bilangan bulat disimpan sebagai BigDecimal)
+ * ITEM_SUBTOTAL — min_val/max_val = rentang subtotal amount
+ *
+ * Contoh ITEM_QTY:
+ *   min_val=1,  max_val=2,    value_type=PERCENTAGE, value=0
+ *   min_val=3,  max_val=5,    value_type=PERCENTAGE, value=10
+ *   min_val=6,  max_val=null, value_type=PERCENTAGE, value=20
+ *
+ * Contoh ITEM_SUBTOTAL:
+ *   min_val=0,      max_val=49999,  value_type=PERCENTAGE, value=0
+ *   min_val=50000,  max_val=99999,  value_type=PERCENTAGE, value=5
+ *   min_val=100000, max_val=null,   value_type=PERCENTAGE, value=10
  */
 @Entity
 @Table(name = "discount_tier")
@@ -25,13 +32,13 @@ class DiscountTier {
     @Column(name = "merchant_id", nullable = false)
     var merchantId: Long = 0
 
-    /** Qty minimum (inklusif) untuk tier ini berlaku */
-    @Column(name = "min_qty", nullable = false)
-    var minQty: Int = 1
+    /** Nilai minimum (inklusif) — qty atau amount tergantung discount.type */
+    @Column(name = "min_val", nullable = false)
+    var minVal: BigDecimal = BigDecimal.ZERO
 
-    /** Qty maksimum (inklusif). Null = tidak ada batas atas */
-    @Column(name = "max_qty")
-    var maxQty: Int? = null
+    /** Nilai maksimum (inklusif). Null = tidak ada batas atas */
+    @Column(name = "max_val")
+    var maxVal: BigDecimal? = null
 
     /** PERCENTAGE | AMOUNT */
     @Column(name = "value_type", nullable = false)
