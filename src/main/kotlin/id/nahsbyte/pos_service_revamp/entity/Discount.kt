@@ -69,4 +69,8 @@ class Discount : BaseAuditEntity() {
 
     @Column(name = "is_active")
     var isActive: Boolean = true
+
+    /** Urutan prioritas untuk strategi DISPLAY_ORDER (ascending = lebih prioritas) */
+    @Column(name = "display_order")
+    var displayOrder: Int? = null
 }

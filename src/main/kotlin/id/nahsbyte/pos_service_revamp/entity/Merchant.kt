@@ -47,4 +47,13 @@ class Merchant : BaseAuditEntity() {
 
     @Column(name = "language_code")
     var languageCode: String? = null
+
+    /**
+     * Strategi pemilihan/pengurutan diskon ketika ada lebih dari satu diskon yang berlaku.
+     * HIGHEST_VALUE  — utamakan diskon dengan nilai terbesar
+     * LOWEST_VALUE   — utamakan diskon dengan nilai terkecil
+     * DISPLAY_ORDER  — utamakan berdasarkan display_order di tabel discount (ascending)
+     */
+    @Column(name = "discount_priority")
+    var discountPriority: String? = null
 }
