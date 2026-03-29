@@ -1,0 +1,795 @@
+{
+  "info": {
+    "_postman_id": "cashlez-pos-api-collection",
+    "name": "Cashlez POS API",
+    "description": "API collection for Cashlez POS and POS-Core modules.\n\n## Setup\n1. Set the `base_url` variable to the appropriate environment URL.\n2. Run the **Auth > Login** request first — it will auto-set `token`, `pos_token`, and `pos_key` via the test script.\n3. Set `version_id` and `device_id` variables if needed.\n\n## Environments\n- Production (envOctopus): `https://octopus-decoupling.cashlez.com`\n- Shadow: `https://octopushadow.cashlez.com`\n- Staging (envSword): `https://sword-decoupling.cashlez.com`\n- SIT: `https://sword-sit-decoupling.cashlez.com`\n- Isat: `https://octopus-isat.cashlez.com`\n- LionFish (ASG): `https://lionfish-decoupling.cashlez.com`\n- Orca: `https://orca.cashlez.com`\n- Angelfish: `https://angelfish.cashlez.com`",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://octopus-decoupling.cashlez.com",
+      "type": "string",
+      "description": "Base URL. Change per environment."
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string",
+      "description": "JWT token from /pos/auth/login response. Auto-set by Login request."
+    },
+    {
+      "key": "pos_token",
+      "value": "",
+      "type": "string",
+      "description": "POS token from login. Auto-set by Login request."
+    },
+    {
+      "key": "pos_key",
+      "value": "",
+      "type": "string",
+      "description": "POS key from login. Auto-set by Login request."
+    },
+    {
+      "key": "version_id",
+      "value": "1",
+      "type": "string",
+      "description": "App version code (BuildConfig.VERSION_CODE)."
+    },
+    {
+      "key": "device_id",
+      "value": "DEVICE_SERIAL_NUMBER",
+      "type": "string",
+      "description": "Device serial number."
+    },
+    {
+      "key": "username",
+      "value": "your_username",
+      "type": "string"
+    },
+    {
+      "key": "product_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "category_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "transaction_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "merchant_trx_id",
+      "value": "TRX-XXXX",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data) {",
+                  "    if (json.data.token)    pm.collectionVariables.set('token',     json.data.token);",
+                  "    if (json.data.posToken) pm.collectionVariables.set('pos_token', json.data.posToken);",
+                  "    if (json.data.posKey)   pm.collectionVariables.set('pos_key',   json.data.posKey);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"123456\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/pos/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "auth", "login"]
+            },
+            "description": "Authenticate and obtain POS JWT token. The test script auto-saves `token`, `pos_token`, and `pos_key` to collection variables."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"merchant_user\",\n  \"password\": \"123456\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/pos/auth/login", "host": ["{{base_url}}"], "path": ["pos","auth","login"] }
+              },
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"Login success\",\n  \"data\": {\n    \"token\": \"eyJhbGciOiJIUzI1NiJ9...\",\n    \"posToken\": \"abc123\",\n    \"posKey\": \"xyz789\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "List Products",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "pos-token",     "value": "{{pos_token}}" },
+              { "key": "pos-key",       "value": "{{pos_key}}" },
+              { "key": "version-id",    "value": "{{version_id}}" },
+              { "key": "device-id",     "value": "{{device_id}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/pos/product/list?size=20&page=0",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "product", "list"],
+              "query": [
+                { "key": "size",       "value": "20",  "description": "Page size (required)" },
+                { "key": "page",       "value": "0",   "description": "Page number (0-based)" },
+                { "key": "categoryId", "value": "",    "description": "Filter by category ID (optional)", "disabled": true },
+                { "key": "keyword",    "value": "",    "description": "Search keyword (optional)", "disabled": true },
+                { "key": "startDate",  "value": "",    "description": "Filter start date (optional)", "disabled": true },
+                { "key": "endDate",    "value": "",    "description": "Filter end date (optional)", "disabled": true },
+                { "key": "upc",        "value": "",    "description": "Filter by UPC (optional)", "disabled": true },
+                { "key": "sku",        "value": "",    "description": "Filter by SKU (optional)", "disabled": true },
+                { "key": "sortBy",     "value": "createdDate", "description": "Sort field (optional)", "disabled": true },
+                { "key": "sortDir",    "value": "ASC", "description": "Sort direction ASC/DESC (optional)", "disabled": true }
+              ]
+            },
+            "description": "Get paginated list of products. Supports filtering by category, keyword, date range, UPC, and SKU."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"OK\",\n  \"meta\": { \"baseUrl\": \"https://...\" },\n  \"data\": [\n    {\n      \"id\": 1,\n      \"merchantId\": 100,\n      \"merchantName\": \"Merchant Name\",\n      \"name\": \"Product A\",\n      \"sku\": \"SKU-001\",\n      \"upc\": \"UPC-001\",\n      \"imageUrl\": \"https://.../image.jpg\",\n      \"imageThumbUrl\": \"https://.../thumb.jpg\",\n      \"description\": \"Product description\",\n      \"basePrice\": 10000.0,\n      \"finalPrice\": 11000.0,\n      \"isPriceIncludeTax\": false,\n      \"isTaxable\": true,\n      \"tax\": { \"taxId\": 1, \"taxName\": \"PPN\", \"taxPercentage\": 10.0, \"taxAmount\": 1000.0 },\n      \"qty\": 50,\n      \"createdDate\": \"2024-01-01T00:00:00\",\n      \"categories\": [],\n      \"productImages\": []\n    }\n  ],\n  \"page\": 0,\n  \"size\": 20,\n  \"totalElements\": 1,\n  \"totalPages\": 1\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Product Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "pos-token",     "value": "{{pos_token}}" },
+              { "key": "pos-key",       "value": "{{pos_key}}" },
+              { "key": "version-id",    "value": "{{version_id}}" },
+              { "key": "device-id",     "value": "{{device_id}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/pos/product/detail/{{product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "product", "detail", "{{product_id}}"]
+            },
+            "description": "Get product detail by ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Add Product",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization",  "value": "Bearer {{token}}" },
+              { "key": "Content-Type",   "value": "application/json" },
+              { "key": "pos-token",      "value": "{{pos_token}}" },
+              { "key": "pos-key",        "value": "{{pos_key}}" },
+              { "key": "version-id",     "value": "{{version_id}}" },
+              { "key": "device-id",      "value": "{{device_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Product Name\",\n  \"price\": 10000,\n  \"sku\": \"SKU-001\",\n  \"upc\": \"UPC-001\",\n  \"imageUrl\": \"https://example.com/image.jpg\",\n  \"imageThumbUrl\": \"https://example.com/thumb.jpg\",\n  \"description\": \"Product description\",\n  \"qty\": 100,\n  \"categoryIds\": [1, 2]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/pos/product/add",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "product", "add"]
+            },
+            "description": "Create a new product."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"Product added\",\n  \"data\": {\n    \"productId\": 123,\n    \"name\": \"Product Name\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Product",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization",  "value": "Bearer {{token}}" },
+              { "key": "Content-Type",   "value": "application/json" },
+              { "key": "pos-token",      "value": "{{pos_token}}" },
+              { "key": "pos-key",        "value": "{{pos_key}}" },
+              { "key": "version-id",     "value": "{{version_id}}" },
+              { "key": "device-id",      "value": "{{device_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": {{product_id}},\n  \"name\": \"Updated Product Name\",\n  \"price\": 12000,\n  \"sku\": \"SKU-001\",\n  \"upc\": \"UPC-001\",\n  \"imageUrl\": \"https://example.com/image.jpg\",\n  \"imageThumbUrl\": \"https://example.com/thumb.jpg\",\n  \"description\": \"Updated description\",\n  \"categoryIds\": [1]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/pos/product/update",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "product", "update"]
+            },
+            "description": "Update an existing product."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Product",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "pos-token",     "value": "{{pos_token}}" },
+              { "key": "pos-key",       "value": "{{pos_key}}" },
+              { "key": "version-id",    "value": "{{version_id}}" },
+              { "key": "device-id",     "value": "{{device_id}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/pos/product/delete/{{product_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "product", "delete", "{{product_id}}"]
+            },
+            "description": "Delete a product by ID."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"Product deleted\",\n  \"data\": {\n    \"trxId\": \"TRX-001\",\n    \"queueNumber\": \"Q-001\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Upload Product Image",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "pos-token",     "value": "{{pos_token}}" },
+              { "key": "pos-key",       "value": "{{pos_key}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Image file to upload (jpg/png)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/images/upload",
+              "host": ["{{base_url}}"],
+              "path": ["images", "upload"]
+            },
+            "description": "Upload product/category image. Returns full URL and thumbnail URL. Upload timeout is 2 minutes."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"Upload success\",\n  \"data\": {\n    \"urlFull\": \"https://cdn.cashlez.com/images/product_full.jpg\",\n    \"urlThumb\": \"https://cdn.cashlez.com/images/product_thumb.jpg\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "List Categories",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "pos-token",     "value": "{{pos_token}}" },
+              { "key": "pos-key",       "value": "{{pos_key}}" },
+              { "key": "version-id",    "value": "{{version_id}}" },
+              { "key": "device-id",     "value": "{{device_id}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/pos/category/list?size=100",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "category", "list"],
+              "query": [
+                { "key": "size", "value": "100", "description": "Page size (required)" },
+                { "key": "page", "value": "0",   "description": "Page number", "disabled": true }
+              ]
+            },
+            "description": "Get list of product categories."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"OK\",\n  \"meta\": { \"baseUrl\": \"https://...\" },\n  \"data\": [\n    {\n      \"id\": 1,\n      \"name\": \"Food\",\n      \"imageUrl\": \"https://.../food.jpg\",\n      \"description\": \"Food products\"\n    }\n  ],\n  \"page\": 0,\n  \"size\": 100,\n  \"totalElements\": 1,\n  \"totalPages\": 1\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Category Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "pos-token",     "value": "{{pos_token}}" },
+              { "key": "pos-key",       "value": "{{pos_key}}" },
+              { "key": "version-id",    "value": "{{version_id}}" },
+              { "key": "device-id",     "value": "{{device_id}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/pos/category/detail/{{category_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "category", "detail", "{{category_id}}"]
+            },
+            "description": "Get category detail by ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Add Category",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization",  "value": "Bearer {{token}}" },
+              { "key": "Content-Type",   "value": "application/json" },
+              { "key": "pos-token",      "value": "{{pos_token}}" },
+              { "key": "pos-key",        "value": "{{pos_key}}" },
+              { "key": "version-id",     "value": "{{version_id}}" },
+              { "key": "device-id",      "value": "{{device_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Category Name\",\n  \"image\": \"https://example.com/image.jpg\",\n  \"description\": \"Category description\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/pos/category/single/add",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "category", "single", "add"]
+            },
+            "description": "Create a new product category."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"Category added\",\n  \"data\": {\n    \"categoryId\": 5,\n    \"name\": \"Category Name\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Category",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization",  "value": "Bearer {{token}}" },
+              { "key": "Content-Type",   "value": "application/json" },
+              { "key": "pos-token",      "value": "{{pos_token}}" },
+              { "key": "pos-key",        "value": "{{pos_key}}" },
+              { "key": "version-id",     "value": "{{version_id}}" },
+              { "key": "device-id",      "value": "{{device_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": {{category_id}},\n  \"name\": \"Updated Category\",\n  \"image\": \"https://example.com/image.jpg\",\n  \"description\": \"Updated description\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/pos/category/update",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "category", "update"]
+            },
+            "description": "Update an existing category."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Category",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "pos-token",     "value": "{{pos_token}}" },
+              { "key": "pos-key",       "value": "{{pos_key}}" },
+              { "key": "version-id",    "value": "{{version_id}}" },
+              { "key": "device-id",     "value": "{{device_id}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/pos/category/delete/{{category_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "category", "delete", "{{category_id}}"]
+            },
+            "description": "Delete a category by ID."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Stock",
+      "item": [
+        {
+          "name": "Update Stock",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization",  "value": "Bearer {{token}}" },
+              { "key": "Content-Type",   "value": "application/json" },
+              { "key": "pos-token",      "value": "{{pos_token}}" },
+              { "key": "pos-key",        "value": "{{pos_key}}" },
+              { "key": "version-id",     "value": "{{version_id}}" },
+              { "key": "device-id",      "value": "{{device_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": {{product_id}},\n  \"qty\": 10,\n  \"updateType\": \"ADD\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/pos/stock/update",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "stock", "update"]
+            },
+            "description": "Adjust product stock quantity. `updateType` values: `ADD`, `SUBTRACT`, `SET`."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"Stock updated\",\n  \"data\": {\n    \"trxId\": \"TRX-001\",\n    \"queueNumber\": \"Q-001\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Stock Movement",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "pos-token",     "value": "{{pos_token}}" },
+              { "key": "pos-key",       "value": "{{pos_key}}" },
+              { "key": "version-id",    "value": "{{version_id}}" },
+              { "key": "device-id",     "value": "{{device_id}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/pos/stock-movement/product/list?productId={{product_id}}&startDate=2024-01-01&endDate=2024-12-31",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "stock-movement", "product", "list"],
+              "query": [
+                { "key": "productId",  "value": "{{product_id}}", "description": "Product ID (required)" },
+                { "key": "startDate",  "value": "2024-01-01",     "description": "Start date yyyy-MM-dd (required)" },
+                { "key": "endDate",    "value": "2024-12-31",     "description": "End date yyyy-MM-dd (required)" }
+              ]
+            },
+            "description": "Get stock movement history for a specific product within a date range."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"OK\",\n  \"data\": [\n    {\n      \"productId\": 1,\n      \"qty\": 10,\n      \"movementType\": \"ADD\",\n      \"movementReason\": \"Restock\",\n      \"localDateTime\": \"2024-06-01T10:00:00\"\n    }\n  ],\n  \"page\": 0,\n  \"size\": 20,\n  \"totalElements\": 1,\n  \"totalPages\": 1\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Payment Settings",
+      "item": [
+        {
+          "name": "Get Payment Setting",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "pos-token",     "value": "{{pos_token}}" },
+              { "key": "pos-key",       "value": "{{pos_key}}" },
+              { "key": "version-id",    "value": "{{version_id}}" },
+              { "key": "device-id",     "value": "{{device_id}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/pos/payment-setting",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "payment-setting"]
+            },
+            "description": "Get merchant payment settings (tax, service charge, rounding)."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"OK\",\n  \"data\": {\n    \"paymentSettingId\": 1,\n    \"isPriceIncludeTax\": false,\n    \"isRounding\": true,\n    \"roundingTarget\": 100,\n    \"roundingType\": \"ROUND_HALF_UP\",\n    \"isServiceCharge\": false,\n    \"serviceChargePercentage\": 0.0,\n    \"serviceChargeAmount\": 0.0,\n    \"isTax\": true,\n    \"taxPercentage\": 11.0,\n    \"taxName\": \"PPN\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Payment Setting",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization",  "value": "Bearer {{token}}" },
+              { "key": "Content-Type",   "value": "application/json" },
+              { "key": "pos-token",      "value": "{{pos_token}}" },
+              { "key": "pos-key",        "value": "{{pos_key}}" },
+              { "key": "version-id",     "value": "{{version_id}}" },
+              { "key": "device-id",      "value": "{{device_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isPriceIncludeTax\": false,\n  \"isRounding\": true,\n  \"roundingTarget\": 100,\n  \"roundingType\": \"ROUND_HALF_UP\",\n  \"isServiceCharge\": false,\n  \"serviceChargePercentage\": 0.0,\n  \"serviceChargeAmount\": 0.0,\n  \"isTax\": true,\n  \"taxPercentage\": 11.0,\n  \"taxName\": \"PPN\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/pos/payment-setting/create",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "payment-setting", "create"]
+            },
+            "description": "Create initial payment setting for the merchant."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Payment Setting",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization",  "value": "Bearer {{token}}" },
+              { "key": "Content-Type",   "value": "application/json" },
+              { "key": "pos-token",      "value": "{{pos_token}}" },
+              { "key": "pos-key",        "value": "{{pos_key}}" },
+              { "key": "version-id",     "value": "{{version_id}}" },
+              { "key": "device-id",      "value": "{{device_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentSettingId\": 1,\n  \"isPriceIncludeTax\": false,\n  \"isRounding\": true,\n  \"roundingTarget\": 100,\n  \"roundingType\": \"ROUND_HALF_UP\",\n  \"isServiceCharge\": true,\n  \"serviceChargePercentage\": 5.0,\n  \"serviceChargeAmount\": 0.0,\n  \"isTax\": true,\n  \"taxPercentage\": 11.0,\n  \"taxName\": \"PPN\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/pos/payment-setting/update",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "payment-setting", "update"]
+            },
+            "description": "Update merchant payment settings."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Payment Methods",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "pos-token",     "value": "{{pos_token}}" },
+              { "key": "pos-key",       "value": "{{pos_key}}" },
+              { "key": "version-id",    "value": "{{version_id}}" },
+              { "key": "device-id",     "value": "{{device_id}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/pos/payment-method/merchant/list",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "payment-method", "merchant", "list"]
+            },
+            "description": "Get all available payment methods for the merchant (internal + external)."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"OK\",\n  \"data\": {\n    \"internalPayments\": [\n      {\n        \"code\": \"CASH\",\n        \"name\": \"Cash\",\n        \"category\": \"CASH\",\n        \"paymentType\": \"CASH\",\n        \"provider\": \"INTERNAL\"\n      },\n      {\n        \"code\": \"EDC_BNI\",\n        \"name\": \"BNI EDC\",\n        \"category\": \"CARD\",\n        \"paymentType\": \"DEBIT\",\n        \"provider\": \"BNI\"\n      }\n    ],\n    \"externalPayments\": [\n      {\n        \"code\": \"QRIS\",\n        \"name\": \"QRIS\",\n        \"category\": \"QRIS\",\n        \"paymentType\": \"QRIS\",\n        \"provider\": \"EXTERNAL\"\n      }\n    ]\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "item": [
+        {
+          "name": "List Transactions",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "pos-token",     "value": "{{pos_token}}" },
+              { "key": "pos-key",       "value": "{{pos_key}}" },
+              { "key": "version-id",    "value": "{{version_id}}" },
+              { "key": "device-id",     "value": "{{device_id}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/pos/transaction/list?page=0&size=20&startDate=2024-01-01&endDate=2024-12-31&sortBy=createdDate&sortType=ASC",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "transaction", "list"],
+              "query": [
+                { "key": "page",       "value": "0",             "description": "Page number (0-based, required)" },
+                { "key": "size",       "value": "20",            "description": "Page size (required)" },
+                { "key": "startDate",  "value": "2024-01-01",    "description": "Start date yyyy-MM-dd (required)" },
+                { "key": "endDate",    "value": "2024-12-31",    "description": "End date yyyy-MM-dd (required)" },
+                { "key": "sortBy",     "value": "createdDate",   "description": "Sort field (required)" },
+                { "key": "sortType",   "value": "ASC",           "description": "Sort direction ASC/DESC (required)" }
+              ]
+            },
+            "description": "Get paginated transaction list filtered by date range."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"OK\",\n  \"data\": [\n    {\n      \"code\": \"TRX-001\",\n      \"trxId\": \"MERCHANT-TRX-001\",\n      \"id\": 1,\n      \"paymentMethod\": \"CASH\",\n      \"status\": \"SUCCESS\",\n      \"totalAmount\": \"55000\",\n      \"transactionDate\": \"2024-06-01T10:00:00\",\n      \"transactionType\": \"SALE\",\n      \"queueNumber\": \"Q001\"\n    }\n  ],\n  \"page\": 0,\n  \"size\": 20,\n  \"totalElements\": 1,\n  \"totalPages\": 1\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Transaction Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "pos-token",     "value": "{{pos_token}}" },
+              { "key": "pos-key",       "value": "{{pos_key}}" },
+              { "key": "version-id",    "value": "{{version_id}}" },
+              { "key": "device-id",     "value": "{{device_id}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/pos/transaction/detail/{{transaction_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "transaction", "detail", "{{transaction_id}}"]
+            },
+            "description": "Get full transaction detail including items and payment breakdown."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"OK\",\n  \"data\": {\n    \"transactionId\": 1,\n    \"code\": \"TRX-001\",\n    \"paymentMethod\": \"CASH\",\n    \"status\": \"SUCCESS\",\n    \"subTotal\": \"50000\",\n    \"totalTax\": \"5500\",\n    \"totalServiceCharge\": \"0\",\n    \"totalRounding\": \"0\",\n    \"totalAmount\": \"55500\",\n    \"cashTendered\": \"60000\",\n    \"cashChange\": \"4500\",\n    \"taxName\": \"PPN\",\n    \"taxPercentage\": \"11\",\n    \"serviceChargeAmount\": \"0\",\n    \"serviceChargePercentage\": \"0\",\n    \"roundingTarget\": \"100\",\n    \"roundingType\": \"ROUND_HALF_UP\",\n    \"transactionDate\": \"2024-06-01T10:00:00\",\n    \"queueNumber\": \"Q001\",\n    \"transactionItems\": [\n      {\n        \"productId\": 1,\n        \"productName\": \"Product A\",\n        \"price\": \"10000\",\n        \"qty\": 5,\n        \"totalPrice\": \"50000\",\n        \"taxId\": 1,\n        \"taxAmount\": \"5500\"\n      }\n    ],\n    \"payments\": [\n      {\n        \"transactionId\": 1,\n        \"paymentMethod\": \"CASH\",\n        \"amountPaid\": \"55500\",\n        \"paymentReference\": \"\",\n        \"paymentDate\": \"2024-06-01T10:00:00\",\n        \"status\": \"SUCCESS\"\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization",  "value": "Bearer {{token}}" },
+              { "key": "Content-Type",   "value": "application/json" },
+              { "key": "pos-token",      "value": "{{pos_token}}" },
+              { "key": "pos-key",        "value": "{{pos_key}}" },
+              { "key": "version-id",     "value": "{{version_id}}" },
+              { "key": "device-id",      "value": "{{device_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subTotal\": \"50000\",\n  \"totalServiceCharge\": \"0\",\n  \"totalTax\": \"5500\",\n  \"totalRounding\": \"0\",\n  \"totalAmount\": \"55500\",\n  \"paymentMethod\": \"CASH\",\n  \"cashTendered\": \"60000\",\n  \"cashChange\": \"4500\",\n  \"priceIncludeTax\": false,\n  \"queueNumber\": 1,\n  \"transactionItems\": [\n    {\n      \"productId\": 1,\n      \"productName\": \"Product A\",\n      \"price\": \"10000\",\n      \"qty\": 5,\n      \"totalPrice\": \"50000\",\n      \"taxId\": 1,\n      \"taxAmount\": \"5500\"\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/pos/transaction/create",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "transaction", "create"]
+            },
+            "description": "Create a new POS transaction. All monetary values are strings."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"Transaction created\",\n  \"data\": {\n    \"id\": 1,\n    \"trxId\": \"MERCHANT-TRX-001\",\n    \"queueNumber\": \"Q001\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Transaction",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization",  "value": "Bearer {{token}}" },
+              { "key": "Content-Type",   "value": "application/json" },
+              { "key": "pos-token",      "value": "{{pos_token}}" },
+              { "key": "pos-key",        "value": "{{pos_key}}" },
+              { "key": "version-id",     "value": "{{version_id}}" },
+              { "key": "device-id",      "value": "{{device_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentTrxId\": \"PAY-001\",\n  \"paymentMethod\": \"CASH\",\n  \"amountPaid\": 55500,\n  \"status\": \"SUCCESS\",\n  \"paymentReference\": \"\",\n  \"paymentDate\": \"2024-06-01T10:00:00\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/pos/transaction/update/{{merchant_trx_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "transaction", "update", "{{merchant_trx_id}}"]
+            },
+            "description": "Update transaction payment status. `merchant_trx_id` is the `trxId` from the Create Transaction response."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Get Summary Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "pos-token",     "value": "{{pos_token}}" },
+              { "key": "pos-key",       "value": "{{pos_key}}" },
+              { "key": "version-id",    "value": "{{version_id}}" },
+              { "key": "device-id",     "value": "{{device_id}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/pos/summary-report/list?startDate=2024-01-01&endDate=2024-12-31",
+              "host": ["{{base_url}}"],
+              "path": ["pos", "summary-report", "list"],
+              "query": [
+                { "key": "startDate", "value": "2024-01-01", "description": "Start date yyyy-MM-dd (required)" },
+                { "key": "endDate",   "value": "2024-12-31", "description": "End date yyyy-MM-dd (required)" }
+              ]
+            },
+            "description": "Get sales summary report: top products, payment method breakdown (internal + external)."
+          },
+          "response": [
+            {
+              "name": "200 Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"OK\",\n  \"data\": {\n    \"productList\": [\n      {\n        \"productName\": \"Product A\",\n        \"totalSaleItems\": 150\n      }\n    ],\n    \"paymentListInternal\": [\n      {\n        \"paymentName\": \"Cash\",\n        \"totalTransactions\": 80,\n        \"totalAmountTransactions\": 4400000.0\n      }\n    ],\n    \"paymentListExternal\": [\n      {\n        \"paymentName\": \"QRIS\",\n        \"totalTransactions\": 20,\n        \"totalAmountTransactions\": 1100000.0\n      }\n    ]\n  }\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
