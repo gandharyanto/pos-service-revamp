@@ -45,4 +45,14 @@ class PaymentSetting : BaseAuditEntity() {
 
     @Column(name = "tax_mode")
     var taxMode: String? = null
+
+    // --- Columns added for revamp features ---
+
+    /** Null = berlaku untuk semua outlet merchant ini */
+    @Column(name = "outlet_id")
+    var outletId: Long? = null
+
+    /** BEFORE_TAX | AFTER_TAX | DPP | AFTER_DISCOUNT */
+    @Column(name = "service_charge_source")
+    var serviceChargeSource: String? = null
 }

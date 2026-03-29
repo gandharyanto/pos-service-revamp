@@ -42,4 +42,9 @@ class Merchant : BaseAuditEntity() {
 
     @Column(name = "merchant_pos_id")
     var merchantPosId: Long? = null
+
+    // --- Columns added for revamp features ---
+
+    @Column(name = "language_code")
+    var languageCode: String? = null
 }

@@ -3,8 +3,8 @@ package id.nahsbyte.pos_service_revamp.entity
 import jakarta.persistence.*
 
 @Entity
-@Table(name = "outlet")
-class Outlet : BaseAuditEntity() {
+@Table(name = "order_type")
+class OrderType : BaseAuditEntity() {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     var id: Long = 0
@@ -12,22 +12,12 @@ class Outlet : BaseAuditEntity() {
     @Column(name = "merchant_id", nullable = false)
     var merchantId: Long = 0
 
-    var code: String? = null
     var name: String = ""
-    var address: String? = null
-    var phone: String? = null
+    var code: String? = null
 
     @Column(name = "is_default")
     var isDefault: Boolean = false
 
     @Column(name = "is_active")
     var isActive: Boolean = true
-
-    // --- Columns added for revamp features ---
-
-    @Column(name = "default_order_type_id")
-    var defaultOrderTypeId: Long? = null
-
-    @Column(name = "language_code")
-    var languageCode: String? = null
 }

@@ -39,4 +39,18 @@ class TransactionItem : BaseAuditEntity() {
 
     @Column(name = "tax_amount")
     var taxAmount: BigDecimal? = null
+
+    // --- Columns added for revamp features ---
+
+    @Column(name = "variant_id")
+    var variantId: Long? = null
+
+    @Column(name = "original_price")
+    var originalPrice: BigDecimal? = null
+
+    @Column(name = "discount_amount")
+    var discountAmount: BigDecimal? = null
+
+    @Column(name = "price_book_item_id")
+    var priceBookItemId: Long? = null
 }

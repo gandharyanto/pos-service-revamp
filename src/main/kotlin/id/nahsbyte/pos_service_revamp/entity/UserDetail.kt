@@ -23,4 +23,13 @@ class UserDetail : BaseAuditEntity() {
 
     @Column(nullable = false)
     var username: String = ""
+
+    // --- Columns added for revamp features ---
+
+    /** Hashed PIN untuk otorisasi refund / operasi sensitif */
+    @Column(name = "pin")
+    var pin: String? = null
+
+    @Column(name = "outlet_id")
+    var outletId: Long? = null
 }

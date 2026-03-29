@@ -51,6 +51,18 @@ class Product : BaseAuditEntity() {
     @Column(name = "tax_id")
     var taxId: Long? = null
 
+    // --- Columns added for revamp features ---
+
+    /** SIMPLE | VARIANT | MODIFIER */
+    @Column(name = "product_type")
+    var productType: String? = null
+
+    @Column(name = "display_order")
+    var displayOrder: Int? = null
+
+    @Column(name = "is_active")
+    var isActive: Boolean? = null
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
         name = "product_categories",

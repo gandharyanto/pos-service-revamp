@@ -76,4 +76,48 @@ class Transaction : BaseAuditEntity() {
 
     @Column(name = "queue_id")
     var queueId: Long? = null
+
+    // --- Columns added for revamp features ---
+
+    @Column(name = "customer_id")
+    var customerId: Long? = null
+
+    @Column(name = "order_type_id")
+    var orderTypeId: Long? = null
+
+    @Column(name = "shift_id")
+    var shiftId: Long? = null
+
+    @Column(name = "discount_id")
+    var discountId: Long? = null
+
+    @Column(name = "discount_amount")
+    var discountAmount: BigDecimal? = null
+
+    @Column(name = "promo_id")
+    var promoId: Long? = null
+
+    @Column(name = "promo_amount")
+    var promoAmount: BigDecimal? = null
+
+    @Column(name = "voucher_amount")
+    var voucherAmount: BigDecimal? = null
+
+    @Column(name = "gross_amount")
+    var grossAmount: BigDecimal? = null
+
+    @Column(name = "net_amount")
+    var netAmount: BigDecimal? = null
+
+    @Column(name = "refund_amount")
+    var refundAmount: BigDecimal? = null
+
+    @Column(name = "refund_reason")
+    var refundReason: String? = null
+
+    @Column(name = "refund_by")
+    var refundBy: String? = null
+
+    @Column(name = "refund_date")
+    var refundDate: java.time.LocalDateTime? = null
 }
