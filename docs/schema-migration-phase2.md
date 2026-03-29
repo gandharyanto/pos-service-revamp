@@ -420,24 +420,52 @@ CREATE TABLE transaction_modifier (
 
 ---
 
-### `discount` + `discount_outlet` + `discount_payment_method`
+### `discount` + `discount_tier` + `discount_outlet` + `discount_payment_method`
+
+#### Tipe Diskon
+
+| `type` | Keterangan |
+|--------|-----------|
+| `TRANSACTION` | Diskon langsung ke total transaksi |
+| `ITEM_QTY` | Diskon bertingkat berdasarkan qty item tertentu |
+
+#### Tipe Nilai (`value_type`)
+
+| `value_type` | Keterangan |
+|-------------|-----------|
+| `PERCENTAGE` | Nilai dalam persen (mis: `10` = 10%) |
+| `AMOUNT` | Nilai dalam rupiah (mis: `5000` = Rp5.000) |
 
 ```sql
 CREATE TABLE discount (
-    id              BIGSERIAL PRIMARY KEY,
-    merchant_id     BIGINT NOT NULL,
-    name            VARCHAR(255) NOT NULL,
-    type            VARCHAR(20) NOT NULL DEFAULT 'PERCENTAGE',  -- PERCENTAGE | AMOUNT
-    value           NUMERIC(38,2) NOT NULL DEFAULT 0,
-    min_purchase    NUMERIC(38,2),
-    visibility      VARCHAR(20) NOT NULL DEFAULT 'ALL_OUTLET',
-    start_date      TIMESTAMP,
-    end_date        TIMESTAMP,
-    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+    id           BIGSERIAL PRIMARY KEY,
+    merchant_id  BIGINT NOT NULL,
+    name         VARCHAR(255) NOT NULL,
+    type         VARCHAR(20) NOT NULL DEFAULT 'TRANSACTION',  -- TRANSACTION | ITEM_QTY
+    value_type   VARCHAR(20) NOT NULL DEFAULT 'PERCENTAGE',   -- PERCENTAGE | AMOUNT
+    value        NUMERIC(38,2) NOT NULL DEFAULT 0,            -- dipakai jika type=TRANSACTION
+    product_id   BIGINT,           -- dipakai jika type=ITEM_QTY (produk yang dihitung qty-nya)
+    min_purchase NUMERIC(38,2),
+    visibility   VARCHAR(20) NOT NULL DEFAULT 'ALL_OUTLET',
+    start_date   TIMESTAMP,
+    end_date     TIMESTAMP,
+    is_active    BOOLEAN NOT NULL DEFAULT TRUE,
     ...audit fields...
 );
 
--- Outlet mana saja yang bisa pakai diskon ini (jika visibility=SPECIFIC_OUTLET)
+-- Tier bertingkat untuk type=ITEM_QTY
+CREATE TABLE discount_tier (
+    id          BIGSERIAL PRIMARY KEY,
+    discount_id BIGINT NOT NULL,
+    merchant_id BIGINT NOT NULL,
+    min_qty     INT NOT NULL,
+    max_qty     INT,               -- null = tidak ada batas atas
+    value_type  VARCHAR(20) NOT NULL DEFAULT 'PERCENTAGE',
+    value       NUMERIC(38,2) NOT NULL DEFAULT 0,
+    display_order INT
+);
+
+-- Outlet yang berlaku (jika visibility=SPECIFIC_OUTLET)
 CREATE TABLE discount_outlet (
     id          BIGSERIAL PRIMARY KEY,
     discount_id BIGINT NOT NULL,
@@ -445,7 +473,7 @@ CREATE TABLE discount_outlet (
     merchant_id BIGINT NOT NULL
 );
 
--- Metode pembayaran mana yang mendapat diskon ini
+-- Metode pembayaran yang mendapat diskon ini
 CREATE TABLE discount_payment_method (
     id                  BIGSERIAL PRIMARY KEY,
     discount_id         BIGINT NOT NULL,
@@ -454,15 +482,48 @@ CREATE TABLE discount_payment_method (
 );
 ```
 
-**Contoh skenario:**
+#### Contoh Skenario `TRANSACTION`
+
 ```
 Diskon "Promo QRIS 10%":
-  discount: type=PERCENTAGE, value=10, visibility=ALL_OUTLET
+  discount: type=TRANSACTION, value_type=PERCENTAGE, value=10
   discount_payment_method: payment_method_code=QRIS
 
 Diskon "Diskon Outlet A Rp5.000":
-  discount: type=AMOUNT, value=5000, visibility=SPECIFIC_OUTLET
+  discount: type=TRANSACTION, value_type=AMOUNT, value=5000, visibility=SPECIFIC_OUTLET
   discount_outlet: outlet_id=3
+```
+
+**Kalkulasi:**
+```
+subTotal = 100.000
+discount (10%) → discount_amount = 10.000
+totalAmount = 100.000 - 10.000 = 90.000
+```
+
+#### Contoh Skenario `ITEM_QTY`
+
+```
+Diskon "Beli Kopi Susu Makin Banyak Makin Hemat":
+  discount: type=ITEM_QTY, product_id=5 (Kopi Susu)
+  discount_tier: min_qty=1, max_qty=2,    value_type=PERCENTAGE, value=0   → 0%
+  discount_tier: min_qty=3, max_qty=5,    value_type=PERCENTAGE, value=10  → 10%
+  discount_tier: min_qty=6, max_qty=null, value_type=PERCENTAGE, value=20  → 20%
+```
+
+**Kalkulasi saat transaksi (beli 4 Kopi Susu @ Rp15.000):**
+```
+qty Kopi Susu = 4  → cocok dengan tier min_qty=3, max_qty=5 → diskon 10%
+itemTotal     = 4 × 15.000 = 60.000
+discount_amount = 60.000 × 10% = 6.000
+totalPrice item setelah diskon = 54.000
+```
+
+**Logika pencarian tier:**
+```
+Cari tier yang memenuhi: min_qty <= qty_item <= max_qty
+Jika max_qty = null, berarti min_qty <= qty_item
+Jika tidak ada tier yang cocok → tidak ada diskon
 ```
 
 ---
@@ -732,9 +793,9 @@ CREATE TABLE notification_setting (
 | Kategori | Jumlah |
 |----------|--------|
 | Tabel existing yang dimodifikasi | 7 |
-| Kolom nullable baru di tabel existing | 27 |
-| Tabel baru dibuat | 26 |
-| **Total tabel setelah migrasi** | **59** |
+| Kolom nullable baru di tabel existing | 28 (+ `value_type`, `product_id` di `discount`) |
+| Tabel baru dibuat | 27 (+ `discount_tier`) |
+| **Total tabel setelah migrasi** | **60** |
 
 ---
 

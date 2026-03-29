@@ -16,12 +16,34 @@ class Discount : BaseAuditEntity() {
 
     var name: String = ""
 
-    /** PERCENTAGE | AMOUNT */
-    var type: String = "PERCENTAGE"
+    /**
+     * Cara diskon dipicu:
+     * TRANSACTION — diskon langsung ke total transaksi
+     * ITEM_QTY    — diskon bertingkat berdasarkan qty item tertentu
+     */
+    var type: String = "TRANSACTION"
 
+    /**
+     * Tipe nilai diskon (untuk type=TRANSACTION):
+     * PERCENTAGE | AMOUNT
+     */
+    @Column(name = "value_type")
+    var valueType: String = "PERCENTAGE"
+
+    /**
+     * Nilai diskon (untuk type=TRANSACTION).
+     * Untuk type=ITEM_QTY, nilai per tier disimpan di tabel discount_tier.
+     */
     var value: BigDecimal = BigDecimal.ZERO
 
-    /** Minimum purchase amount to apply discount */
+    /**
+     * Untuk type=ITEM_QTY: produk mana yang qty-nya dihitung.
+     * Null = berlaku untuk total qty semua item di transaksi.
+     */
+    @Column(name = "product_id")
+    var productId: Long? = null
+
+    /** Minimum purchase amount to apply discount (untuk type=TRANSACTION) */
     @Column(name = "min_purchase")
     var minPurchase: BigDecimal? = null
 
