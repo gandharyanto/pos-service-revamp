@@ -6,6 +6,24 @@
 Authorization: Bearer <token>
 ```
 
+## Konvensi Naming
+
+Dokumen API ini memakai **nama field request/response yang human-readable**. Persistence database mengikuti schema migration Phase 2. Mapping penting:
+
+| Nama API / Bisnis | Nama Database |
+|---|---|
+| `grossSubTotal` / `grossRevenue` | `transaction.gross_amount` |
+| `netSubTotal` / `netRevenue` | `transaction.net_amount` |
+| `refundAmount` | `transaction.refund_amount` |
+| `refundReason` | `transaction.refund_reason` |
+| `refundBy` | `transaction.refund_by` |
+| `refundDate` | `transaction.refund_date` |
+| `voucher code` | tabel `voucher` |
+| `loyalty history` | tabel `loyalty_transaction` |
+| `printer` | tabel `printer_setting` |
+
+Jika ada perbedaan istilah antara FSD, API doc, dan schema, kontrak HTTP mengikuti dokumen ini, sedangkan entity/repository mengikuti schema migration.
+
 ---
 
 ## Daftar Endpoint
@@ -127,6 +145,13 @@ Authorization: Bearer <token>
 | 95 | POST   | `/pos/printer/add` | Tambah printer |
 | 96 | PUT    | `/pos/printer/update` | Update printer |
 | 97 | DELETE | `/pos/printer/delete/{printerId}` | Hapus printer |
+
+Catatan sinkronisasi resource:
+
+- Resource `voucher/code` pada API dipersist ke tabel `voucher` pada schema migration.
+- Resource `customer/{id}/loyalty-history` pada API dipersist ke tabel `loyalty_transaction`.
+- Resource `printer` pada API dipersist ke tabel `printer_setting`.
+
 | **Disbursement (Revenue Sharing)** | | | |
 | 98  | GET    | `/pos/disbursement/rule/list` | List aturan disbursement. `?activeOnly=true` |
 | 99  | GET    | `/pos/disbursement/rule/detail/{ruleId}` | Detail aturan |

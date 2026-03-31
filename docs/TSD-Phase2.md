@@ -83,6 +83,28 @@ spring.security.user.name=admin
 spring.security.user.password=<secret>
 ```
 
+### 1.5 Sinkronisasi Naming dengan FSD dan Schema
+
+Dokumen TSD ini mengikuti **nama persistence/schema** untuk tabel dan kolom database, sedangkan FSD memakai beberapa istilah bisnis yang lebih mudah dibaca. Untuk menghindari salah mapping saat implementasi:
+
+| Istilah Bisnis / API | Nama Persistence / Schema |
+|---|---|
+| `grossSubTotal` | `transaction.gross_amount` |
+| `netSubTotal` | `transaction.net_amount` |
+| `refundAmount` | `transaction.refund_amount` |
+| `refundReason` | `transaction.refund_reason` |
+| `refundBy` | `transaction.refund_by` |
+| `refundDate` | `transaction.refund_date` |
+| `voucher_code` | tabel `voucher` yang direpurpose |
+| `loyalty_history` | tabel `loyalty_transaction` |
+| `printer` | tabel `printer_setting` |
+
+Aturan implementasi:
+
+- Entity, repository, dan migration **mengikuti schema**.
+- DTO/response API **boleh mengikuti istilah bisnis/FSD**.
+- Jika ada perbedaan nama, sediakan mapper eksplisit di service/controller layer.
+
 ---
 
 ## 2. Arsitektur Sistem
@@ -493,7 +515,7 @@ var modifiedBy: String? = null
 |---|---|---|
 | `loyalty_program` | id, merchantId, name, pointsPerAmount, minRedeemPoints, pointValueInCurrency, isActive | Program loyalty |
 | `loyalty_redemption_rule` | id, loyaltyProgramId, minPoints, maxRedeemPercent | Aturan redeem |
-| `loyalty_transaction` | id, merchantId, customerId, transactionId, points, type (EARN/REDEEM), createdDate | Riwayat poin |
+| `loyalty_transaction` | id, merchantId, customerId, transactionId, points, type (EARN/REDEEM/ADJUST/EXPIRE), createdDate | Riwayat poin. Disebut `loyalty_history` di FSD |
 | `product_loyalty_setting` | id, productId, multiplier, isExcluded | Pengaturan poin per produk |
 
 #### Grup: Refund & Notification
@@ -509,7 +531,7 @@ var modifiedBy: String? = null
 |---|---|---|
 | `tax` | id, merchantId, name, percentage, isActive, isDefault, createdDate, modifiedDate | Konfigurasi pajak |
 | `receipt_template` | id, merchantId, outletId, header, footer, showTax, showServiceCharge, showRounding, showLogo, logoUrl, showQueueNumber, paperSize | Template struk |
-| `printer_setting` | id, merchantId, outletId, type, name, connectionType, ipAddress, port, paperSize, isDefault, isActive | Pengaturan printer |
+| `printer_setting` | id, merchantId, outletId, type, name, connectionType, ipAddress, port, paperSize, isDefault, isActive | Pengaturan printer. Disebut `printer` di FSD/API |
 | `disbursement_rule` | id, merchantId, name, layer, recipientId, recipientName, percentage, source, productTypeFilter, displayOrder, isActive | Aturan disbursement |
 | `disbursement_log` | id, transactionId, ruleId, merchantId, recipientId, recipientName, layer, baseAmount, percentage, amount, status, createdDate, settledDate | Log disbursement |
 

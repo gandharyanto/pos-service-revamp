@@ -24,6 +24,13 @@
    - [3.9 Receipt Template & Printer Settings](#39-receipt-template--printer-settings)
    - [3.10 Disbursement (Revenue Sharing)](#310-disbursement-revenue-sharing)
    - [3.11 Financial Report](#311-financial-report)
+   - [3.12 Order Type & POS Language Setting](#312-order-type--pos-language-setting)
+   - [3.13 Workshift & Cash Register](#313-workshift--cash-register)
+   - [3.14 Refund at POS](#314-refund-at-pos)
+   - [3.15 Loyalty Program & Redemption Rule](#315-loyalty-program--redemption-rule)
+   - [3.16 MDR Setting](#316-mdr-setting)
+   - [3.17 Notification Setting](#317-notification-setting)
+   - [3.18 Product Variant & Modifier](#318-product-variant--modifier)
 4. [Alur Transaksi End-to-End](#4-alur-transaksi-end-to-end)
 5. [Business Rules Lintas Fitur](#5-business-rules-lintas-fitur)
 6. [Manajemen State & Status](#6-manajemen-state--status)
@@ -48,12 +55,12 @@ Dokumen ini mendefinisikan secara fungsional seluruh fitur Phase 2 sehingga dapa
 
 ### 1.3 Ruang Lingkup
 
-Dokumen ini mencakup 11 modul fungsional Phase 2. Semua fitur berjalan di atas infrastruktur berikut:
+Dokumen ini mencakup 18 modul fungsional Phase 2. Semua fitur berjalan di atas infrastruktur berikut:
 
 | Aspek | Detail |
 |---|---|
-| Framework | Spring Boot 4.0.5 + Kotlin |
-| Database | PostgreSQL |
+| Framework |  |
+| Database |  |
 | Autentikasi | JWT Bearer Token |
 | Multi-tenancy | `merchantId` diekstrak dari setiap request via JWT |
 | Format Response | `{ "success": true, "message": "...", "data": {...} }` |
@@ -66,6 +73,24 @@ Dokumen ini mencakup 11 modul fungsional Phase 2. Semua fitur berjalan di atas i
 - Semua penghapusan data sensitif menggunakan soft delete (`isActive = false`) kecuali dinyatakan eksplisit sebagai hard delete.
 - Kalkulasi harga menggunakan 5 layer terurut dan tidak dapat diubah urutannya.
 - Waktu yang digunakan adalah waktu server (UTC).
+
+### 1.5 Konvensi Penamaan FSD vs Schema
+
+Dokumen FSD ini menggunakan istilah bisnis yang lebih mudah dibaca seperti `grossSubTotal`, `netSubTotal`, `voucher_code`, atau `loyalty_history`. Saat implementasi, tim backend WAJIB mengikuti nama tabel/kolom aktual pada schema migration Phase 2. Mapping utamanya adalah:
+
+| Istilah di FSD | Nama di Schema Migration | Catatan |
+|---|---|---|
+| `grossSubTotal` | `transaction.gross_amount` | Nama response/API boleh tetap `grossSubTotal` |
+| `netSubTotal` | `transaction.net_amount` | Nama response/API boleh tetap `netSubTotal` |
+| `refundAmount` | `transaction.refund_amount` | Snapshot di tabel transaksi |
+| `refundReason` | `transaction.refund_reason` | Snapshot di tabel transaksi |
+| `refundBy` | `transaction.refund_by` | Snapshot di tabel transaksi |
+| `refundDate` | `transaction.refund_date` | Snapshot di tabel transaksi |
+| `voucher_code` | tabel `voucher` yang direpurpose | Secara bisnis tetap disebut voucher code |
+| `loyalty_history` | tabel `loyalty_transaction` | FSD lama memakai istilah generik riwayat poin |
+| `printer` | tabel `printer_setting` | Istilah bisnis tetap printer |
+
+Jika ada konflik antara istilah bisnis FSD dan nama persistence schema, implementasi entity/repository mengikuti schema, sedangkan contract API dapat tetap memakai istilah bisnis yang lebih jelas.
 
 ---
 
@@ -84,6 +109,13 @@ Dokumen ini mencakup 11 modul fungsional Phase 2. Semua fitur berjalan di atas i
 | 9 | Receipt & Printer | Template struk per merchant/outlet; pengaturan printer fisik | Konfigurasi |
 | 10 | Disbursement | Aturan bagi hasil pendapatan; log per transaksi; laporan rekap | Keuangan |
 | 11 | Financial Report | Laporan ringkasan, metode pembayaran, produk terlaris, per outlet, disbursement | Pelaporan |
+| 12 | Order Type & POS Language | Master tipe pesanan dan pengaturan bahasa merchant/outlet | Konfigurasi |
+| 13 | Workshift & Cash Register | Buka/tutup shift, opening/closing cash, cash adjustment, rekap shift | Operasional |
+| 14 | Refund at POS | Refund penuh/sebagian dengan approval dan audit trail | Operasional |
+| 15 | Loyalty Program | Konfigurasi earn/redeem point, expiry, rule penukaran, override per produk | CRM |
+| 16 | MDR Setting | Konfigurasi fee metode pembayaran dan dampaknya ke settlement | Keuangan |
+| 17 | Notification Setting | Konfigurasi notifikasi operasional dan rekap berkala | Operasional |
+| 18 | Product Variant & Modifier | Variasi produk, opsi tambahan, snapshot pilihan ke transaksi | Katalog / Operasional |
 
 ---
 
@@ -659,7 +691,9 @@ VoucherBrand (1) → VoucherGroup (banyak) → VoucherCode (banyak)
 | isRequiredCustomer | Boolean | Apakah wajib tautkan ke customer |
 | isActive | Boolean | Soft delete flag |
 
-**Tabel: `voucher_code`**
+**Tabel bisnis: `voucher_code`**
+
+Catatan implementasi: pada schema migration, entitas ini dipersist ke tabel `voucher` yang direpurpose menjadi kode voucher individual.
 
 | Kolom | Tipe | Keterangan |
 |---|---|---|
@@ -769,7 +803,9 @@ Return { imported: N, skipped: M, skippedCodes: [...] }
 | isActive | Boolean | Soft delete flag |
 | createdAt | Timestamp | Waktu registrasi |
 
-**Tabel: `loyalty_history`**
+**Tabel bisnis: `loyalty_history`**
+
+Catatan implementasi: pada schema migration, audit trail poin disimpan di tabel `loyalty_transaction`.
 
 | Kolom | Tipe | Keterangan |
 |---|---|---|
@@ -985,7 +1021,9 @@ BCrypt.verify(inputPin, storedHashedPin)
 | showQueueNumber | Boolean | Tampilkan nomor antrian |
 | paperSize | Enum | `58MM` \| `80MM` |
 
-**Tabel: `printer`**
+**Tabel bisnis: `printer`**
+
+Catatan implementasi: pada schema migration, entitas ini dipersist ke tabel `printer_setting`.
 
 | Kolom | Tipe | Keterangan |
 |---|---|---|
@@ -1202,6 +1240,9 @@ Return log ter-update
 #### 3.11.3 Spesifikasi Response per Endpoint
 
 **GET `/pos/report/summary`**
+
+Catatan implementasi: nama field response tetap `grossSubTotal` dan `netSubTotal`, tetapi persistence layer mengikuti kolom schema `gross_amount` dan `net_amount`.
+
 ```json
 {
   "data": {
@@ -1335,6 +1376,669 @@ Return agregasi
 
 ---
 
+### 3.12 Order Type & POS Language Setting
+
+#### 3.12.1 User Story
+
+> Sebagai merchant, saya ingin mendefinisikan tipe pesanan seperti dine-in, take away, atau delivery, menetapkan tipe default per outlet, dan mengatur bahasa default merchant/outlet agar perilaku transaksi dan konfigurasi POS konsisten di setiap cabang.
+
+#### 3.12.2 Model Data
+
+**Tabel: `order_type`**
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | Primary key |
+| merchantId | UUID | FK ke merchant |
+| name | String | Nama tipe pesanan |
+| code | String | Kode unik, contoh: `DINE_IN`, `TAKE_AWAY`, `DELIVERY` |
+| isDefault | Boolean | Default tipe pesanan merchant |
+| isActive | Boolean | Soft delete flag |
+
+**Field tambahan:**
+
+| Entitas | Kolom | Keterangan |
+|---|---|---|
+| `outlet` | `defaultOrderTypeId` | Default order type per outlet |
+| `transaction` | `orderTypeId` | Snapshot tipe pesanan transaksi |
+| `merchant` | `languageCode` | Bahasa default merchant |
+| `outlet` | `languageCode` | Override bahasa per outlet |
+
+#### 3.12.3 Endpoints
+
+| Method | Path | Deskripsi |
+|---|---|---|
+| GET | `/pos/order-type/list` | Daftar order type aktif merchant |
+| GET | `/pos/order-type/detail/{id}` | Detail order type |
+| POST | `/pos/order-type/add` | Tambah order type |
+| PUT | `/pos/order-type/update` | Update order type |
+| DELETE | `/pos/order-type/delete/{id}` | Soft delete order type |
+| PUT | `/pos/merchant/language` | Set bahasa default merchant |
+| PUT | `/pos/outlet/{outletId}/language` | Set bahasa outlet |
+| GET | `/pos/outlet/{outletId}/config` | Ambil konfigurasi outlet termasuk order type default dan language |
+
+#### 3.12.4 Alur Fungsional
+
+**Resolusi Order Type saat Transaksi Baru:**
+```
+Saat transaksi dibuat:
+    Jika request membawa orderTypeId:
+        validasi orderType milik merchant dan aktif
+        simpan ke transaction.orderTypeId
+    Jika request tidak membawa orderTypeId:
+        ambil outlet.defaultOrderTypeId
+        jika null, fallback ke order_type.isDefault = true
+        simpan hasilnya ke transaction.orderTypeId
+```
+
+**Resolusi Bahasa POS:**
+```
+Saat client meminta konfigurasi outlet:
+    cari outlet.languageCode
+    jika null -> gunakan merchant.languageCode
+    jika merchant.languageCode null -> fallback ke "id"
+```
+
+#### 3.12.5 Business Rules
+
+1. **Minimal Satu Default Merchant:** Merchant sebaiknya memiliki satu `order_type.isDefault = true`. Jika default lama diganti, default lama otomatis di-unset.
+2. **Outlet Override:** `outlet.defaultOrderTypeId` menggantikan default merchant hanya untuk outlet tersebut.
+3. **Snapshot Transaksi:** `transaction.orderTypeId` adalah snapshot saat transaksi dibuat; perubahan default di kemudian hari tidak mengubah transaksi historis.
+4. **Language Setting adalah Konfigurasi UI:** `languageCode` tidak mengubah kalkulasi backend; fungsinya untuk konfigurasi aplikasi POS/admin client.
+5. **Nilai Bahasa Valid:** Minimal mendukung `id` dan `en`. Nilai lain harus ditolak sampai memang disupport product.
+
+#### 3.12.6 Kondisi Error & Edge Case
+
+| Skenario | Respons Sistem |
+|---|---|
+| Set default order type ke record merchant lain | `404 Not Found` |
+| Delete order type yang sedang dipakai transaksi baru | Soft delete diperbolehkan; transaksi historis tetap aman |
+| outlet.defaultOrderTypeId mengarah ke order type nonaktif | Fallback ke default merchant |
+| `languageCode` di luar daftar yang didukung | `400 Bad Request` |
+
+---
+
+### 3.13 Workshift & Cash Register
+
+#### 3.13.1 User Story
+
+> Sebagai kasir atau supervisor outlet, saya ingin membuka dan menutup shift, memasukkan opening cash, mencatat cash in/cash out, dan melihat selisih kas aktual versus expected cash agar kontrol operasional toko lebih rapi dan dapat diaudit.
+
+#### 3.13.2 Model Data
+
+**Tabel: `cashier_shift`**
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | Primary key |
+| merchantId | UUID | FK ke merchant |
+| outletId | UUID | FK ke outlet |
+| userId | UUID | FK ke user/kasir |
+| username | String | Snapshot username kasir |
+| openingCash | Decimal | Saldo kas awal |
+| closingCash | Decimal / null | Saldo kas akhir aktual |
+| openDate | Timestamp | Waktu shift dibuka |
+| closeDate | Timestamp / null | Waktu shift ditutup |
+| status | Enum | `OPEN` \| `CLOSED` |
+| note | String / null | Catatan shift |
+| openedBy | String | Username pembuka |
+| closedBy | String / null | Username penutup |
+
+**Tabel tambahan (direkomendasikan): `cashier_shift_adjustment`**
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | Primary key |
+| shiftId | UUID | FK ke cashier_shift |
+| type | Enum | `CASH_IN` \| `CASH_OUT` \| `ADJUSTMENT` |
+| amount | Decimal | Nilai penyesuaian |
+| reason | String | Alasan |
+| createdBy | String | User yang mencatat |
+| createdAt | Timestamp | Waktu pencatatan |
+
+#### 3.13.3 Endpoints
+
+| Method | Path | Deskripsi |
+|---|---|---|
+| POST | `/pos/shift/open` | Buka shift baru |
+| PUT | `/pos/shift/close` | Tutup shift aktif |
+| GET | `/pos/shift/current` | Shift aktif user/outlet |
+| GET | `/pos/shift/list` | Riwayat shift |
+| POST | `/pos/shift/adjustment/add` | Catat cash in/out/adjustment |
+| GET | `/pos/shift/detail/{id}` | Detail shift + rekap kas |
+
+#### 3.13.4 Alur Fungsional
+
+**Buka Shift:**
+```
+Kasir -> POST /pos/shift/open { outletId, openingCash, note? }
+    ↓
+Validasi belum ada shift OPEN untuk user+outlet yang sama
+    ↓
+INSERT cashier_shift(status = OPEN, openDate = now, openingCash = value)
+    ↓
+Return shift aktif
+```
+
+**Tutup Shift:**
+```
+Kasir/Supervisor -> PUT /pos/shift/close { shiftId, closingCash, note? }
+    ↓
+Validasi shift masih OPEN
+    ↓
+Hitung expectedCash:
+    openingCash
+    + total pembayaran CASH pada transaksi shift
+    + total CASH_IN
+    - total CASH_OUT
+    - total refund cash yang disetujui
+    ↓
+variance = closingCash - expectedCash
+    ↓
+UPDATE cashier_shift(status = CLOSED, closeDate = now, closingCash = value)
+    ↓
+Return shift summary
+```
+
+#### 3.13.5 Business Rules
+
+1. **Satu Shift Aktif:** Satu user hanya boleh memiliki satu shift `OPEN` per outlet pada satu waktu.
+2. **Binding ke Transaksi:** Setiap transaksi POS yang dibuat saat shift aktif harus menyimpan `transaction.shiftId`.
+3. **Supervisor Close:** Shift dapat ditutup oleh supervisor/manager bila kasir berhalangan, dan `closedBy` harus merekam siapa yang menutup.
+4. **Adjustment Immutable:** Catatan `cashier_shift_adjustment` tidak boleh diubah setelah dibuat; jika salah input, koreksi dilakukan dengan adjustment baru.
+5. **Expected Cash Bukan Sumber Kebenaran Tunggal:** Sistem tetap menyimpan `closingCash` aktual walaupun berbeda dari `expectedCash`.
+
+#### 3.13.6 Kondisi Error & Edge Case
+
+| Skenario | Respons Sistem |
+|---|---|
+| Buka shift saat masih ada shift aktif | `409 Conflict` |
+| Tutup shift yang sudah CLOSED | `400 Bad Request` |
+| Transaksi dibuat tanpa shift aktif | Boleh atau ditolak tergantung policy outlet; default disarankan `400 Bad Request` untuk POS kasir |
+| Adjustment amount negatif | `400 Bad Request` |
+
+---
+
+### 3.14 Refund at POS
+
+#### 3.14.1 User Story
+
+> Sebagai supervisor atau kasir yang terotorisasi, saya ingin memproses refund penuh atau sebagian dari transaksi yang sudah dibayar, dengan audit trail yang lengkap dan kontrol approval, sehingga komplain pelanggan dapat ditangani tanpa merusak integritas laporan.
+
+#### 3.14.2 Model Data
+
+**Tabel: `refund`**
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | Primary key |
+| transactionId | UUID | FK ke transaksi asli |
+| merchantId | UUID | FK ke merchant |
+| outletId | UUID / null | FK ke outlet |
+| amount | Decimal | Nilai refund |
+| reason | String / null | Alasan refund |
+| type | Enum | `FULL` \| `PARTIAL` |
+| status | Enum | `PENDING` \| `APPROVED` \| `REJECTED` |
+| refundBy | String | User pengaju |
+| approvedBy | String / null | User approver |
+| refundDate | Timestamp | Waktu pengajuan |
+| approvedDate | Timestamp / null | Waktu approval |
+| note | String / null | Catatan tambahan |
+
+**Kolom snapshot di `transaction`:**
+
+Catatan implementasi: pada schema migration, field snapshot berikut tersimpan sebagai `refund_amount`, `refund_reason`, `refund_by`, dan `refund_date`.
+
+| Kolom | Keterangan |
+|---|---|
+| `refundAmount` | Akumulasi total refund yang disetujui |
+| `refundReason` | Snapshot alasan refund terakhir atau utama |
+| `refundBy` | Snapshot operator terakhir |
+| `refundDate` | Snapshot waktu refund terakhir |
+
+#### 3.14.3 Endpoints
+
+| Method | Path | Deskripsi |
+|---|---|---|
+| POST | `/pos/refund/request` | Ajukan refund |
+| PUT | `/pos/refund/approve` | Setujui refund |
+| PUT | `/pos/refund/reject` | Tolak refund |
+| GET | `/pos/refund/list` | Daftar refund |
+| GET | `/pos/refund/detail/{id}` | Detail refund |
+
+#### 3.14.4 Alur Fungsional
+
+**Pengajuan Refund:**
+```
+Kasir/Supervisor -> POST /pos/refund/request { transactionId, amount, type, reason, operationToken }
+    ↓
+Validasi transaksi status = PAID
+    ↓
+Validasi amount > 0 dan amount <= refundableAmount
+    ↓
+INSERT refund(status = PENDING)
+    ↓
+Jika policy outlet tidak membutuhkan approval tambahan:
+    proses approve otomatis
+```
+
+**Approval Refund:**
+```
+Manager/Admin -> PUT /pos/refund/approve { refundId, operationToken }
+    ↓
+Validasi refund.status = PENDING
+    ↓
+UPDATE refund.status = APPROVED, approvedDate = now
+    ↓
+UPDATE transaction.refundAmount += refund.amount
+    ↓
+Jika total refundAmount = transaction.amountDue:
+    transaction.status = REFUNDED
+Jika refundAmount < amountDue:
+    transaction.status tetap PAID
+```
+
+#### 3.14.5 Business Rules
+
+1. **Refundable Amount:** `refundableAmount = amountDue - totalApprovedRefund`.
+2. **Full vs Partial:** `FULL` mensyaratkan `amount = refundableAmount` saat pengajuan. `PARTIAL` mensyaratkan `amount < refundableAmount`.
+3. **Approval Flow:** Default yang direkomendasikan adalah kasir membuat `PENDING`, manager/admin mengubah ke `APPROVED` atau `REJECTED`.
+4. **Laporan:** Refund tidak mengubah nilai gross historis; nilai refund ditampilkan terpisah di report.
+5. **Loyalty dan Voucher:** Jika transaksi menghasilkan poin loyalty, sistem harus melakukan reversal proporsional atau penuh sesuai kebijakan merchant. Voucher yang sudah `USED` tidak otomatis dikembalikan ke `AVAILABLE`, kecuali ada kebijakan manual yang eksplisit.
+6. **Disbursement:** Refund yang sudah di-approve harus mempengaruhi settlement/disbursement lanjutan, minimal melalui report dan reconciliation process.
+
+#### 3.14.6 Kondisi Error & Edge Case
+
+| Skenario | Respons Sistem |
+|---|---|
+| Refund pada transaksi `PENDING` / `VOID` | `400 Bad Request` |
+| amount melebihi refundableAmount | `400 Bad Request` |
+| Approve refund yang sudah APPROVED/REJECTED | `400 Bad Request` |
+| Multiple partial refund hingga nilai total habis | Diperbolehkan; status transaksi berubah `REFUNDED` saat total refund sama dengan amountDue |
+
+---
+
+### 3.15 Loyalty Program & Redemption Rule
+
+#### 3.15.1 User Story
+
+> Sebagai merchant, saya ingin mengatur cara pelanggan mendapatkan poin, kapan poin kadaluarsa, dan bagaimana poin dapat ditukar menjadi pembayaran, diskon, atau produk gratis, sehingga program loyalitas lebih fleksibel dan bisa disesuaikan dengan model bisnis saya.
+
+#### 3.15.2 Model Data
+
+**Tabel: `loyalty_program`**
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | Primary key |
+| merchantId | UUID | FK ke merchant |
+| name | String | Nama program |
+| earnMode | Enum | `RATIO` \| `MULTIPLY` |
+| pointsPerAmount | Decimal | Untuk mode `RATIO` |
+| earnMultiplier | Decimal | Untuk mode `MULTIPLY` |
+| expiryMode | Enum | `NONE` \| `ROLLING_DAYS` \| `FIXED_DATE` |
+| expiryDays | Integer / null | Untuk `ROLLING_DAYS` |
+| expiryDate | Timestamp / null | Untuk `FIXED_DATE` |
+| isActive | Boolean | Status aktif |
+
+**Tabel: `loyalty_redemption_rule`**
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | Primary key |
+| loyaltyProgramId | UUID | FK ke loyalty_program |
+| merchantId | UUID | FK ke merchant |
+| type | Enum | `PAYMENT` \| `DISCOUNT` \| `FREE_PRODUCT` |
+| redeemRate | Decimal / null | Nilai uang per poin untuk type `PAYMENT` |
+| minRedeemPoints | Decimal / null | Minimum point redeem |
+| maxRedeemPoints | Decimal / null | Maksimum point redeem |
+| requiredPoints | Decimal / null | Poin yang dibutuhkan untuk rule `DISCOUNT` / `FREE_PRODUCT` |
+| discountType | Enum / null | `PERCENTAGE` \| `AMOUNT` |
+| discountValue | Decimal / null | Nilai diskon |
+| maxDiscountAmount | Decimal / null | Cap diskon |
+| rewardProductId | UUID / null | Produk gratis |
+| rewardQty | Integer / null | Qty hadiah |
+| isActive | Boolean | Status aktif |
+
+**Tabel: `product_loyalty_setting`**
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| productId | UUID | FK ke product |
+| merchantId | UUID | FK ke merchant |
+| isLoyaltyEnabled | Boolean | Produk ikut loyalty atau tidak |
+| fixedPoints | Decimal / null | Override poin earn untuk produk tertentu |
+
+#### 3.15.3 Endpoints
+
+| Method | Path | Deskripsi |
+|---|---|---|
+| GET | `/pos/loyalty/program` | Ambil program loyalty aktif |
+| POST | `/pos/loyalty/program/create` | Buat program loyalty |
+| PUT | `/pos/loyalty/program/update` | Update program loyalty |
+| GET | `/pos/loyalty/redemption-rule/list` | Daftar rule redeem |
+| POST | `/pos/loyalty/redemption-rule/add` | Tambah rule redeem |
+| PUT | `/pos/loyalty/redemption-rule/update` | Update rule redeem |
+| PUT | `/pos/product/{productId}/loyalty-setting` | Set override loyalty per produk |
+| POST | `/pos/loyalty/redeem/preview` | Preview nilai redeem sebelum transaksi final |
+
+#### 3.15.4 Alur Fungsional
+
+**Earn Points:**
+```
+Saat transaksi PAID:
+    ambil loyalty_program aktif
+    hitung earnPoints dari item yang loyalty-enabled
+    jika product_loyalty_setting.fixedPoints ada:
+        gunakan fixedPoints × qty
+    jika tidak:
+        gunakan earnMode global
+    insert loyalty_transaction type = EARN
+    update customer.loyaltyPoints
+```
+
+**Redeem Preview:**
+```
+Kasir -> POST /pos/loyalty/redeem/preview { customerId, ruleId, requestedPoints?, cart }
+    ↓
+Validasi customer aktif dan saldo cukup
+    ↓
+Validasi rule aktif dan syarat minimum terpenuhi
+    ↓
+Hitung reward:
+    PAYMENT -> loyaltyRedeemAmount
+    DISCOUNT -> discountAmount tambahan
+    FREE_PRODUCT -> reward product
+    ↓
+Return preview tanpa mengurangi poin
+```
+
+#### 3.15.5 Business Rules
+
+1. **Satu Program Aktif:** Dalam satu waktu hanya boleh ada satu `loyalty_program.isActive = true` per merchant.
+2. **Product Override:** `product_loyalty_setting` hanya mempengaruhi earn points, bukan redeem rule.
+3. **Expiry:** Jika `expiryMode = ROLLING_DAYS`, setiap transaksi poin menyimpan expiry sendiri. Jika `FIXED_DATE`, seluruh poin program mengikuti tanggal yang sama.
+4. **Redeem Type PAYMENT:** Nilai redeem mengurangi `amountDue` pada layer loyalty seperti yang sudah dijelaskan di alur transaksi.
+5. **Redeem Type DISCOUNT / FREE_PRODUCT:** Jika diaktifkan di POS, sistem harus mengubah kalkulasi cart sebelum pembayaran final dan tetap menyimpan audit trail di `loyalty_transaction`.
+6. **Saldo Tidak Negatif:** Pengurangan poin hanya boleh terjadi setelah transaksi final berhasil atau setelah merchant melakukan konfirmasi redeem yang eksplisit.
+
+#### 3.15.6 Kondisi Error & Edge Case
+
+| Skenario | Respons Sistem |
+|---|---|
+| Merchant belum punya program loyalty aktif | Earn/redeem tidak berjalan |
+| requestedPoints < minimum rule | `400 Bad Request` |
+| requiredPoints melebihi saldo customer | `400 Bad Request` |
+| Produk `isLoyaltyEnabled = false` | Tidak menghasilkan poin |
+
+---
+
+### 3.16 MDR Setting
+
+#### 3.16.1 User Story
+
+> Sebagai merchant atau operator platform, saya ingin mengatur fee MDR per metode pembayaran dan menentukan siapa yang menanggung biaya tersebut agar settlement, report, dan disbursement dapat dihitung dengan benar.
+
+#### 3.16.2 Model Data
+
+**Tabel: `mdr_setting`**
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | Primary key |
+| merchantId | UUID | FK ke merchant |
+| paymentMethodCode | String | Kode metode pembayaran |
+| percentage | Decimal | Fee persentase |
+| flatFee | Decimal | Fee tetap |
+| chargedTo | Enum | `MERCHANT` \| `CUSTOMER` |
+| isActive | Boolean | Status aktif |
+
+#### 3.16.3 Endpoints
+
+| Method | Path | Deskripsi |
+|---|---|---|
+| GET | `/pos/mdr/list` | Daftar MDR setting |
+| POST | `/pos/mdr/add` | Tambah MDR setting |
+| PUT | `/pos/mdr/update` | Update MDR setting |
+| DELETE | `/pos/mdr/delete/{id}` | Soft delete MDR setting |
+| POST | `/pos/mdr/preview` | Preview fee berdasarkan metode pembayaran dan amount |
+
+#### 3.16.4 Alur Fungsional
+
+```
+Saat payment line dipilih:
+    cari mdr_setting aktif untuk paymentMethodCode
+    jika tidak ada:
+        fee = 0
+    jika ada:
+        fee = (paymentAmount × percentage / 100) + flatFee
+
+    jika chargedTo = MERCHANT:
+        amountPaidByCustomer tetap
+        settlementNet = paymentAmount - fee
+
+    jika chargedTo = CUSTOMER:
+        surchargeToCustomer = fee
+        amountPaidByCustomer = paymentAmount + fee
+```
+
+#### 3.16.5 Business Rules
+
+1. **Satu Setting Aktif per Payment Method:** Dalam satu merchant, hanya boleh ada satu MDR aktif per `paymentMethodCode`.
+2. **ChargedTo CUSTOMER:** Jika fee dibebankan ke customer, surcharge harus muncul eksplisit di preview dan receipt.
+3. **ChargedTo MERCHANT:** Fee tidak menambah `amountDue`, tetapi mempengaruhi settlement/report downstream.
+4. **Reportability:** Sistem harus bisa menghitung total fee MDR per periode dan per payment method.
+5. **Integrasi Split Payment:** Jika satu transaksi memakai beberapa payment line, MDR dihitung per payment line, bukan di level transaksi total.
+
+#### 3.16.6 Kondisi Error & Edge Case
+
+| Skenario | Respons Sistem |
+|---|---|
+| percentage negatif | `400 Bad Request` |
+| Duplikasi setting aktif untuk payment method yang sama | `409 Conflict` |
+| paymentMethodCode tidak dikenal | `400 Bad Request` atau `fee = 0` sesuai policy integrasi |
+
+---
+
+### 3.17 Notification Setting
+
+#### 3.17.1 User Story
+
+> Sebagai merchant atau manajer, saya ingin menerima notifikasi atas kejadian penting seperti ringkasan harian, settlement, atau penutupan shift agar saya dapat memonitor operasional toko tanpa harus selalu membuka dashboard.
+
+#### 3.17.2 Model Data
+
+**Tabel: `notification_setting`**
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | Primary key |
+| merchantId | UUID | FK ke merchant |
+| emailAddress | String / null | Tujuan notifikasi email |
+| isEnabled | Boolean | Notifikasi aktif/nonaktif |
+| notifyTypes | Array/String | Contoh: `DAILY_SUMMARY`, `SETTLEMENT`, `SHIFT_CLOSE`, `LOW_STOCK` |
+| sendTime | String | Format `HH:mm` untuk notifikasi terjadwal |
+| createdAt | Timestamp | Waktu pembuatan |
+| updatedAt | Timestamp | Waktu update |
+
+#### 3.17.3 Endpoints
+
+| Method | Path | Deskripsi |
+|---|---|---|
+| GET | `/pos/notification-setting` | Ambil setting notifikasi merchant |
+| POST | `/pos/notification-setting/create` | Buat setting |
+| PUT | `/pos/notification-setting/update` | Update setting |
+| POST | `/pos/notification-setting/test` | Kirim notifikasi uji |
+
+#### 3.17.4 Alur Fungsional
+
+```
+Scheduler / event publisher berjalan
+    ↓
+Ambil notification_setting merchant yang isEnabled = true
+    ↓
+Evaluasi notifyTypes:
+    DAILY_SUMMARY -> kirim ringkasan harian pada sendTime
+    SETTLEMENT -> kirim saat settlement/disbursement tertentu terjadi
+    SHIFT_CLOSE -> kirim saat shift ditutup
+    LOW_STOCK -> kirim saat stok melewati threshold
+```
+
+#### 3.17.5 Business Rules
+
+1. **Satu Setting per Merchant:** Merchant hanya memiliki satu konfigurasi notifikasi aktif.
+2. **Test Notification:** Endpoint test tidak boleh mengirim data bisnis sensitif penuh; cukup payload simulasi.
+3. **Graceful Degradation:** Jika kanal notifikasi gagal, event bisnis utama tetap dianggap sukses; kegagalan notifikasi dicatat untuk retry/logging.
+4. **Notify Types Parsial:** Merchant dapat memilih sebagian tipe notifikasi tanpa harus mengaktifkan semuanya.
+
+#### 3.17.6 Kondisi Error & Edge Case
+
+| Skenario | Respons Sistem |
+|---|---|
+| emailAddress kosong saat kanal email diwajibkan | `400 Bad Request` |
+| sendTime tidak valid | `400 Bad Request` |
+| notifyTypes berisi nilai tak dikenal | `400 Bad Request` |
+
+---
+
+### 3.18 Product Variant & Modifier
+
+#### 3.18.1 User Story
+
+> Sebagai merchant, saya ingin mendefinisikan varian produk seperti ukuran atau warna, serta modifier opsional seperti topping atau add-on, agar kasir dapat menjual produk dengan konfigurasi yang tepat dan sistem menyimpan snapshot pilihan tersebut di transaksi.
+
+#### 3.18.2 Model Data
+
+**Tabel: `product_variant_group`**
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | Primary key |
+| productId | UUID | FK ke product |
+| merchantId | UUID | FK ke merchant |
+| name | String | Nama grup varian, contoh `Ukuran` |
+| isRequired | Boolean | Apakah wajib pilih satu varian |
+| displayOrder | Integer | Urutan tampil |
+| isActive | Boolean | Status aktif |
+
+**Tabel: `product_variant`**
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | Primary key |
+| variantGroupId | UUID | FK ke product_variant_group |
+| productId | UUID | FK ke product |
+| merchantId | UUID | FK ke merchant |
+| name | String | Nama varian, contoh `Large` |
+| additionalPrice | Decimal | Harga tambahan |
+| sku | String / null | SKU opsional |
+| displayOrder | Integer | Urutan tampil |
+| isActive | Boolean | Status aktif |
+
+**Tabel: `product_modifier_group`**
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | Primary key |
+| productId | UUID | FK ke product |
+| merchantId | UUID | FK ke merchant |
+| name | String | Nama grup modifier |
+| minSelect | Integer | Minimum pilihan |
+| maxSelect | Integer | Maksimum pilihan |
+| isRequired | Boolean | Apakah wajib pilih |
+| displayOrder | Integer | Urutan tampil |
+| isActive | Boolean | Status aktif |
+
+**Tabel: `product_modifier`**
+
+| Kolom | Tipe | Keterangan |
+|---|---|---|
+| id | UUID | Primary key |
+| modifierGroupId | UUID | FK ke product_modifier_group |
+| productId | UUID | FK ke product |
+| merchantId | UUID | FK ke merchant |
+| name | String | Nama modifier |
+| additionalPrice | Decimal | Harga tambahan |
+| displayOrder | Integer | Urutan tampil |
+| isActive | Boolean | Status aktif |
+
+**Snapshot di Transaksi**
+
+| Entitas | Kolom | Keterangan |
+|---|---|---|
+| `transaction_items` | `variantId` | Varian yang dipilih |
+| `transaction_items` | `originalPrice` | Harga produk sebelum override price book |
+| `transaction_modifier` | `modifierName` | Snapshot nama modifier |
+| `transaction_modifier` | `additionalPrice` | Snapshot harga modifier |
+| `transaction_modifier` | `qty` | Qty modifier di item tersebut |
+
+#### 3.18.3 Endpoints
+
+| Method | Path | Deskripsi |
+|---|---|---|
+| GET | `/pos/product/{productId}/variant-group/list` | List grup varian produk |
+| POST | `/pos/product/{productId}/variant-group/add` | Tambah grup varian |
+| PUT | `/pos/product/variant-group/update` | Update grup varian |
+| DELETE | `/pos/product/variant-group/delete/{id}` | Soft delete grup varian |
+| POST | `/pos/product/{productId}/variant/add` | Tambah variant |
+| PUT | `/pos/product/variant/update` | Update variant |
+| DELETE | `/pos/product/variant/delete/{id}` | Soft delete variant |
+| GET | `/pos/product/{productId}/modifier-group/list` | List grup modifier produk |
+| POST | `/pos/product/{productId}/modifier-group/add` | Tambah grup modifier |
+| PUT | `/pos/product/modifier-group/update` | Update grup modifier |
+| DELETE | `/pos/product/modifier-group/delete/{id}` | Soft delete grup modifier |
+| POST | `/pos/product/{productId}/modifier/add` | Tambah modifier |
+| PUT | `/pos/product/modifier/update` | Update modifier |
+| DELETE | `/pos/product/modifier/delete/{id}` | Soft delete modifier |
+
+#### 3.18.4 Alur Fungsional
+
+**Kalkulasi Harga Item dengan Variant dan Modifier:**
+```
+Saat item dimasukkan ke cart:
+    ambil harga dasar product
+    jika variant dipilih:
+        validasi variant milik product yang sama dan aktif
+        basePrice = product.price + variant.additionalPrice
+    jika modifier dipilih:
+        validasi semua modifier milik product yang sama dan aktif
+        modifierTotal = SUM(modifier.additionalPrice × qtyModifier)
+    itemBaseUnitPrice = basePrice + modifierTotal
+    simpan originalPrice = itemBaseUnitPrice
+    lalu teruskan ke evaluasi Price Book
+```
+
+**Snapshot ke Transaksi:**
+```
+Saat transaksi disimpan:
+    transaction_items.variantId = selectedVariantId
+    transaction_items.originalPrice = itemBaseUnitPrice
+    untuk setiap modifier:
+        INSERT transaction_modifier(transactionItemId, modifierId, modifierName, additionalPrice, qty)
+```
+
+#### 3.18.5 Business Rules
+
+1. **Varian Bersifat Single Select per Group:** Satu item hanya boleh memilih maksimal satu variant dari satu `product_variant_group`.
+2. **Modifier Bersifat Multi Select:** Satu item dapat memilih beberapa modifier selama masih dalam batas `minSelect` dan `maxSelect` group.
+3. **Urutan Kalkulasi:** Harga product + variant + modifier dihitung lebih dulu sebagai `originalPrice`, baru setelah itu Price Book dapat mengubah unit price efektif.
+4. **Scope Price Book:** Secara default Price Book berlaku pada item setelah harga variant/modifier dibentuk. Jika product owner ingin perilaku lain, harus dinyatakan eksplisit di requirement.
+5. **Promo dan Discount:** Evaluasi promo/discount memakai nilai item final setelah varian/modifier dan price book diterapkan.
+6. **Snapshot Immutable:** Nama dan harga tambahan modifier yang sudah masuk ke `transaction_modifier` tidak berubah walaupun master modifier diubah atau dinonaktifkan.
+7. **Receipt dan Kitchen/Order Print:** Nama variant dan modifier harus ditampilkan sebagai detail item agar operasional outlet tidak kehilangan konteks pesanan.
+
+#### 3.18.6 Kondisi Error & Edge Case
+
+| Skenario | Respons Sistem |
+|---|---|
+| Variant tidak milik product yang dipilih | `400 Bad Request` |
+| Modifier tidak milik product yang dipilih | `400 Bad Request` |
+| Group required tapi tidak ada pilihan | `400 Bad Request` |
+| Jumlah modifier melebihi `maxSelect` | `400 Bad Request` |
+| Variant/modifier nonaktif dipakai di transaksi baru | `400 Bad Request` |
+
+---
+
 ## 4. Alur Transaksi End-to-End
 
 ### 4.1 Gambaran Umum
@@ -1456,6 +2160,16 @@ Setelah pembayaran dikonfirmasi, transaksi berubah status menjadi `PAID`. Sistem
 5. Membuat `disbursement_log` untuk setiap rule aktif
 6. Mencetak struk ke printer default outlet
 
+### 4.3.1 Klarifikasi Alur untuk Modul Tambahan
+
+Klarifikasi berikut melengkapi narasi pada Bagian 4.3 untuk modul yang ditambahkan setelah sinkronisasi dengan schema migration:
+
+1. **Sebelum Persiapan Cart:** Untuk outlet yang mewajibkan shift, kasir harus memiliki `cashier_shift` berstatus `OPEN` sebelum membuat transaksi baru.
+2. **Saat Transaksi Dibuat:** Sistem harus menyelesaikan `orderTypeId` dari request atau default outlet sebelum evaluasi Price Book tipe `ORDER_TYPE`.
+3. **Saat Pembayaran:** Jika metode pembayaran memiliki konfigurasi MDR aktif, fee dihitung per payment method dan ditampilkan/diterapkan sesuai `chargedTo`.
+4. **Setelah Finalisasi:** Selain post-transaction action yang sudah disebutkan, sistem dapat mem-publish event notifikasi operasional bila merchant mengaktifkannya.
+5. **Pasca-Transaksi:** Refund penuh atau sebagian adalah alur terpisah setelah transaksi `PAID`, tidak menjadi bagian dari checkout normal.
+
 ### 4.4 Diagram Alur (Teks)
 
 ```
@@ -1530,6 +2244,16 @@ Setelah pembayaran dikonfirmasi, transaksi berubah status menjadi `PAID`. Sistem
 [Selesai]
 ```
 
+### 4.4.1 Tambahan Node Diagram
+
+Jika diagram di atas diimplementasikan ke state machine atau workflow engine, node berikut perlu dianggap bagian dari flow lengkap walaupun belum divisualkan penuh pada diagram utama:
+
+- `Shift Aktif?` sebelum transaksi dibuat, untuk outlet yang mewajibkan shift terbuka.
+- `Resolusi Order Type` sebelum evaluasi Price Book.
+- `Hitung MDR per Payment Method` pada tahap pembayaran.
+- `Send Notification Event` sebagai side effect non-blocking setelah finalisasi.
+- `Refund Flow` sebagai workflow terpisah setelah transaksi `PAID`.
+
 ---
 
 ## 5. Business Rules Lintas Fitur
@@ -1593,6 +2317,49 @@ Disbursement dihitung setelah seluruh kalkulasi transaksi selesai (status = PAID
 | `NET` | `netSubTotal` |
 | `NET_AFTER_TAX` | `netSubTotal + totalTax` |
 | `NET_AFTER_TAX_SC` | `netSubTotal + totalTax + serviceCharge` |
+
+### 5.7 Order Type dan Resolusi Harga
+
+- `orderTypeId` di transaksi harus diputuskan sebelum evaluasi Price Book tipe `ORDER_TYPE`.
+- Jika transaksi tidak membawa `orderTypeId`, sistem memakai `outlet.defaultOrderTypeId`, lalu fallback ke `order_type.isDefault = true`.
+- Perubahan default order type tidak mengubah transaksi historis.
+
+### 5.8 Shift dan Transaksi
+
+- Untuk outlet yang mewajibkan shift, transaksi baru hanya dapat dibuat jika kasir memiliki shift `OPEN`.
+- Setiap transaksi harus menyimpan `shiftId` dari shift aktif agar rekap kas dan audit trail akurat.
+- Refund tunai yang disetujui pada shift yang sama atau shift berikutnya harus tetap masuk ke rekap shift saat refund diproses, bukan saat transaksi awal dibuat.
+
+### 5.9 Refund terhadap Laporan, Loyalty, dan Disbursement
+
+- Refund yang `APPROVED` tidak mengubah gross historis transaksi, tetapi menambah nilai `totalRefund` di report.
+- Jika transaksi sebelumnya menghasilkan loyalty point, sistem harus melakukan reversal poin berdasarkan kebijakan merchant: penuh untuk full refund, proporsional untuk partial refund.
+- Disbursement yang sudah dibuat dari transaksi yang kemudian direfund tidak otomatis dihapus; penyesuaian dilakukan melalui proses rekonsiliasi atau settlement adjustment.
+
+### 5.10 Loyalty Program terhadap Kalkulasi Transaksi
+
+- Rule loyalty type `PAYMENT` mengurangi `amountDue` pada layer terakhir, setelah voucher.
+- Rule loyalty type `DISCOUNT` mengurangi nilai transaksi dan harus diperlakukan sebagai komponen diskon terpisah agar audit trail jelas.
+- Rule loyalty type `FREE_PRODUCT` menambahkan reward ke cart atau menurunkan nilai item terkait, tergantung desain checkout client.
+- Preview redeem tidak boleh mengurangi saldo poin; pengurangan final hanya boleh dilakukan setelah transaksi selesai atau redeem dikonfirmasi secara eksplisit.
+
+### 5.11 MDR dan Settlement
+
+- MDR dihitung per payment method yang digunakan, bukan hanya di level transaksi total.
+- Jika `chargedTo = CUSTOMER`, surcharge MDR harus terlihat di preview checkout, receipt, dan detail transaksi.
+- Jika `chargedTo = MERCHANT`, fee tidak menambah `amountDue`, tetapi harus muncul di report settlement atau rekonsiliasi pembayaran.
+
+### 5.12 Notification sebagai Side Effect
+
+- Pengiriman notifikasi tidak boleh menjadi bagian dari transaksi database utama yang membuat operasi bisnis gagal.
+- Jika notifikasi gagal terkirim, status transaksi/refund/shift tetap dianggap sukses selama operasi bisnis utama berhasil.
+
+### 5.13 Variant, Modifier, dan Pricing Layer
+
+- Variant dan modifier membentuk `originalPrice` item sebelum Price Book diterapkan.
+- `transaction_items.originalPrice` menyimpan harga hasil product + variant + modifier sebelum override dari Price Book.
+- Jika Price Book mengubah harga item, nilai override tersebut menjadi basis untuk promo, diskon, pajak, dan service charge.
+- Report produk minimum harus tetap dapat mengatribusikan penjualan ke `productId`; report lanjutan per variant dapat ditambahkan kemudian jika dibutuhkan.
 
 ---
 
@@ -1658,7 +2425,32 @@ Disbursement dihitung setelah seluruh kalkulasi transaksi selesai (status = PAID
 | `SETTLED` | Dana sudah ditransfer/dikonfirmasi |
 | `FAILED` | Proses disbursement gagal |
 
-### 6.4 Status Entitas dengan Soft Delete
+### 6.4 Status Refund
+
+```
+[PENDING] ──── Disetujui ───► [APPROVED]
+    │
+    └──── Ditolak ─────────► [REJECTED]
+```
+
+| Status | Deskripsi |
+|---|---|
+| `PENDING` | Refund sudah diajukan, menunggu approval |
+| `APPROVED` | Refund disetujui dan nilai refund masuk ke perhitungan transaksi/report |
+| `REJECTED` | Refund ditolak dan tidak mempengaruhi transaksi |
+
+### 6.5 Status Cashier Shift
+
+```
+[OPEN] ──── Shift ditutup ───► [CLOSED]
+```
+
+| Status | Deskripsi |
+|---|---|
+| `OPEN` | Shift sedang aktif dan dapat menerima transaksi |
+| `CLOSED` | Shift selesai; tidak menerima transaksi baru |
+
+### 6.6 Status Entitas dengan Soft Delete
 
 Entitas berikut menggunakan `isActive` untuk soft delete:
 
@@ -1673,7 +2465,7 @@ Entitas berikut menggunakan `isActive` untuk soft delete:
 | Cashier (User) | `isActive` | Kasir tidak aktif tidak bisa login |
 | Disbursement Rule | `isActive` | Rule tidak aktif tidak memproses transaksi baru |
 
-### 6.5 Status Loyalty History Type
+### 6.7 Status Loyalty History Type
 
 | Type | Deskripsi | Nilai Points |
 |---|---|---|
@@ -1725,6 +2517,19 @@ fun getTaxList() = taxRepository.findAll()
 | Bulk Import Voucher | ✅ | ✅ | ❌ |
 
 ### 7.4 PIN Otorisasi untuk Operasi Sensitif
+
+**Tambahan akses untuk modul baru Phase 2:**
+
+| Operasi Tambahan | ADMIN | MANAGER | CASHIER |
+|---|---|---|---|
+| CRUD Order Type | ✅ | ✅ | ❌ |
+| Set Language Merchant/Outlet | ✅ | ✅ | ❌ |
+| Open / Close Shift | ✅ | ✅ | ✅ |
+| Cash Adjustment Shift | ✅ | ✅ | ✅ |
+| Approve Refund | ✅ | ✅ | ❌ |
+| Kelola Loyalty Program | ✅ | ✅ | ❌ |
+| Kelola MDR Setting | ✅ | ❌ | ❌ |
+| Kelola Notification Setting | ✅ | ✅ | ❌ |
 
 Operasi berikut memerlukan verifikasi PIN kasir sebelum dieksekusi:
 
@@ -1849,6 +2654,75 @@ Semua error menggunakan format response yang konsisten:
 | `DISBURSEMENT_LOG_NOT_FOUND` | Log disbursement tidak ditemukan |
 | `DISBURSEMENT_ALREADY_SETTLED` | Disbursement sudah di-settle |
 
+**Order Type / Language:**
+
+| Error Code | Deskripsi |
+|---|---|
+| `ORDER_TYPE_NOT_FOUND` | Order type tidak ditemukan |
+| `ORDER_TYPE_DUPLICATE_CODE` | Kode order type sudah digunakan |
+| `ORDER_TYPE_INACTIVE` | Order type tidak aktif |
+| `LANGUAGE_CODE_INVALID` | Kode bahasa tidak didukung |
+
+**Shift:**
+
+| Error Code | Deskripsi |
+|---|---|
+| `SHIFT_ALREADY_OPEN` | Masih ada shift aktif untuk user/outlet ini |
+| `SHIFT_NOT_FOUND` | Shift tidak ditemukan |
+| `SHIFT_ALREADY_CLOSED` | Shift sudah ditutup |
+| `SHIFT_REQUIRED` | Outlet mensyaratkan shift aktif sebelum transaksi |
+| `SHIFT_ADJUSTMENT_INVALID` | Nilai atau tipe adjustment shift tidak valid |
+
+**Refund:**
+
+| Error Code | Deskripsi |
+|---|---|
+| `REFUND_NOT_FOUND` | Refund tidak ditemukan |
+| `REFUND_AMOUNT_INVALID` | Nilai refund tidak valid |
+| `REFUND_AMOUNT_EXCEEDED` | Nilai refund melebihi refundable amount |
+| `REFUND_STATUS_INVALID` | Status refund tidak mengizinkan aksi ini |
+| `REFUND_TRANSACTION_NOT_REFUNDABLE` | Transaksi tidak dapat direfund |
+
+**Loyalty Program:**
+
+| Error Code | Deskripsi |
+|---|---|
+| `LOYALTY_PROGRAM_NOT_FOUND` | Program loyalty tidak ditemukan |
+| `LOYALTY_PROGRAM_INACTIVE` | Program loyalty tidak aktif |
+| `LOYALTY_REDEMPTION_RULE_NOT_FOUND` | Rule redeem loyalty tidak ditemukan |
+| `LOYALTY_REDEMPTION_RULE_INVALID` | Rule redeem tidak valid untuk request ini |
+| `LOYALTY_PRODUCT_OVERRIDE_INVALID` | Konfigurasi loyalty produk tidak valid |
+
+**MDR:**
+
+| Error Code | Deskripsi |
+|---|---|
+| `MDR_SETTING_NOT_FOUND` | Setting MDR tidak ditemukan |
+| `MDR_SETTING_DUPLICATE` | Setting MDR aktif untuk payment method ini sudah ada |
+| `MDR_PERCENTAGE_INVALID` | Persentase MDR tidak valid |
+| `MDR_PAYMENT_METHOD_INVALID` | Payment method untuk MDR tidak dikenali |
+
+**Notification:**
+
+| Error Code | Deskripsi |
+|---|---|
+| `NOTIFICATION_SETTING_NOT_FOUND` | Konfigurasi notifikasi tidak ditemukan |
+| `NOTIFICATION_TYPE_INVALID` | Tipe notifikasi tidak valid |
+| `NOTIFICATION_SEND_TIME_INVALID` | Format waktu kirim tidak valid |
+| `NOTIFICATION_DESTINATION_REQUIRED` | Tujuan notifikasi wajib diisi |
+
+**Variant / Modifier:**
+
+| Error Code | Deskripsi |
+|---|---|
+| `VARIANT_GROUP_NOT_FOUND` | Grup variant tidak ditemukan |
+| `VARIANT_NOT_FOUND` | Variant tidak ditemukan |
+| `VARIANT_PRODUCT_MISMATCH` | Variant tidak milik produk ini |
+| `MODIFIER_GROUP_NOT_FOUND` | Grup modifier tidak ditemukan |
+| `MODIFIER_NOT_FOUND` | Modifier tidak ditemukan |
+| `MODIFIER_PRODUCT_MISMATCH` | Modifier tidak milik produk ini |
+| `MODIFIER_SELECTION_INVALID` | Pilihan modifier tidak memenuhi aturan min/max |
+
 **Report:**
 
 | Error Code | Deskripsi |
@@ -1889,6 +2763,338 @@ Setiap error `5xx` wajib di-log dengan informasi berikut:
 - `stackTrace`
 
 Error `4xx` cukup di-log tanpa stack trace (untuk efisiensi log), kecuali error yang mengindikasikan potensi serangan (contoh: PIN brute-force).
+
+### 8.7 Catatan Implementasi Persistence
+
+Untuk menghindari mismatch antara kontrak API dan schema migration, implementasi disarankan memisahkan:
+
+- **Nama field API/DTO**: boleh memakai istilah bisnis seperti `grossSubTotal`, `netSubTotal`, `refundAmount`, `loyaltyHistory`.
+- **Nama field entity/database**: harus mengikuti schema migration aktual.
+
+Mapping minimal yang wajib diperhatikan:
+
+| Layer API / FSD | Layer Database |
+|---|---|
+| `grossSubTotal` | `transaction.gross_amount` |
+| `netSubTotal` | `transaction.net_amount` |
+| `refundAmount` | `transaction.refund_amount` |
+| `refundReason` | `transaction.refund_reason` |
+| `refundBy` | `transaction.refund_by` |
+| `refundDate` | `transaction.refund_date` |
+| `voucher_code` | tabel `voucher` |
+| `loyalty_history` | tabel `loyalty_transaction` |
+| `printer` | tabel `printer_setting` |
+
+Jika diperlukan, backend boleh membuat mapper atau projection khusus agar naming response tetap konsisten dengan FSD tanpa mengubah schema persistence.
+
+### 8.8 Contoh Request / Response
+
+Contoh di bawah ini bersifat referensial untuk membantu implementasi client dan backend. Field tambahan seperti audit info, pagination, atau metadata boleh ditambahkan selama tidak mengubah kontrak inti.
+
+#### 8.8.1 Order Type
+
+**POST `/pos/order-type/add`**
+```json
+{
+  "name": "Dine In",
+  "code": "DINE_IN",
+  "isDefault": true
+}
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "message": "Order type berhasil dibuat",
+  "data": {
+    "id": "8c9f9d47-8f54-4a85-90b8-fb0f8cf26b08",
+    "name": "Dine In",
+    "code": "DINE_IN",
+    "isDefault": true,
+    "isActive": true
+  }
+}
+```
+
+#### 8.8.2 Shift Open
+
+**POST `/pos/shift/open`**
+```json
+{
+  "outletId": "5dc11534-9316-49d2-bf51-0d7a1bdf28a9",
+  "openingCash": 500000,
+  "note": "Shift pagi"
+}
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "message": "Shift berhasil dibuka",
+  "data": {
+    "id": "f722c9d2-6a31-4a7d-b1d3-6b4298546c24",
+    "status": "OPEN",
+    "openingCash": 500000,
+    "openDate": "2026-03-31T08:00:00Z",
+    "outletId": "5dc11534-9316-49d2-bf51-0d7a1bdf28a9"
+  }
+}
+```
+
+#### 8.8.3 Refund Request
+
+**POST `/pos/refund/request`**
+```json
+{
+  "transactionId": "72b0f29d-98f0-4cb7-bdd2-b69578b5c433",
+  "amount": 25000,
+  "type": "PARTIAL",
+  "reason": "Produk salah input",
+  "operationToken": "op_token_xxx"
+}
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "message": "Refund berhasil diajukan",
+  "data": {
+    "id": "d6866446-5f35-446f-aa87-b575b4b19b6f",
+    "transactionId": "72b0f29d-98f0-4cb7-bdd2-b69578b5c433",
+    "amount": 25000,
+    "type": "PARTIAL",
+    "status": "PENDING",
+    "reason": "Produk salah input"
+  }
+}
+```
+
+#### 8.8.4 Loyalty Program
+
+**POST `/pos/loyalty/program/create`**
+```json
+{
+  "name": "Loyalty Reguler",
+  "earnMode": "RATIO",
+  "pointsPerAmount": 10000,
+  "expiryMode": "ROLLING_DAYS",
+  "expiryDays": 365
+}
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "message": "Program loyalty berhasil dibuat",
+  "data": {
+    "id": "8bf80984-6b3a-45c3-88f2-0bd211f66f77",
+    "name": "Loyalty Reguler",
+    "earnMode": "RATIO",
+    "pointsPerAmount": 10000,
+    "expiryMode": "ROLLING_DAYS",
+    "expiryDays": 365,
+    "isActive": true
+  }
+}
+```
+
+#### 8.8.5 MDR Preview
+
+**POST `/pos/mdr/preview`**
+```json
+{
+  "paymentMethodCode": "CREDIT_CARD_BCA",
+  "amount": 100000
+}
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "message": "Preview MDR berhasil",
+  "data": {
+    "paymentMethodCode": "CREDIT_CARD_BCA",
+    "amount": 100000,
+    "percentage": 2.5,
+    "flatFee": 0,
+    "chargedTo": "MERCHANT",
+    "feeAmount": 2500,
+    "customerPays": 100000,
+    "settlementNet": 97500
+  }
+}
+```
+
+#### 8.8.6 Notification Setting
+
+**POST `/pos/notification-setting/create`**
+```json
+{
+  "emailAddress": "owner@merchant.com",
+  "isEnabled": true,
+  "notifyTypes": ["DAILY_SUMMARY", "SHIFT_CLOSE"],
+  "sendTime": "21:00"
+}
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "message": "Setting notifikasi berhasil dibuat",
+  "data": {
+    "id": "a3040740-6d56-4cb1-9a22-0682f32e5861",
+    "emailAddress": "owner@merchant.com",
+    "isEnabled": true,
+    "notifyTypes": ["DAILY_SUMMARY", "SHIFT_CLOSE"],
+    "sendTime": "21:00"
+  }
+}
+```
+
+#### 8.8.7 Product Variant Group
+
+**POST `/pos/product/{productId}/variant-group/add`**
+```json
+{
+  "name": "Ukuran",
+  "isRequired": true,
+  "displayOrder": 1,
+  "variants": [
+    { "name": "Regular", "additionalPrice": 0, "displayOrder": 1 },
+    { "name": "Large", "additionalPrice": 5000, "displayOrder": 2 }
+  ]
+}
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "message": "Grup variant berhasil dibuat",
+  "data": {
+    "id": "f57b2f27-c0fc-4717-9b57-7b360ca66490",
+    "name": "Ukuran",
+    "isRequired": true,
+    "variants": [
+      { "id": "ca6c8817-31ce-4b3e-90c6-64c421fcf6dd", "name": "Regular", "additionalPrice": 0 },
+      { "id": "7bd94f68-3f7f-4ba0-a6cb-4612b2cb130f", "name": "Large", "additionalPrice": 5000 }
+    ]
+  }
+}
+```
+
+#### 8.8.8 Product Modifier Group
+
+**POST `/pos/product/{productId}/modifier-group/add`**
+```json
+{
+  "name": "Topping",
+  "minSelect": 0,
+  "maxSelect": 3,
+  "isRequired": false,
+  "displayOrder": 1,
+  "modifiers": [
+    { "name": "Extra Shot", "additionalPrice": 4000, "displayOrder": 1 },
+    { "name": "Whipped Cream", "additionalPrice": 3000, "displayOrder": 2 }
+  ]
+}
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "message": "Grup modifier berhasil dibuat",
+  "data": {
+    "id": "709fd0df-63e5-43ab-80e2-4874b6963c85",
+    "name": "Topping",
+    "minSelect": 0,
+    "maxSelect": 3,
+    "modifiers": [
+      { "id": "2d6626d1-c1e0-4c8a-9ba1-c59fdb8a4dfe", "name": "Extra Shot", "additionalPrice": 4000 },
+      { "id": "f86f6948-bcb0-4f16-a806-f54afd5b6ebc", "name": "Whipped Cream", "additionalPrice": 3000 }
+    ]
+  }
+}
+```
+
+#### 8.8.9 Create Transaction dengan Variant dan Modifier
+
+**POST `/pos/transaction/create`**
+```json
+{
+  "outletId": "5dc11534-9316-49d2-bf51-0d7a1bdf28a9",
+  "customerId": "e864714c-efb5-40a2-92f5-135246f3e8c6",
+  "orderTypeId": "8c9f9d47-8f54-4a85-90b8-fb0f8cf26b08",
+  "shiftId": "f722c9d2-6a31-4a7d-b1d3-6b4298546c24",
+  "items": [
+    {
+      "productId": "f9be39bf-5de3-4f4c-96aa-1eb41877e2ea",
+      "qty": 2,
+      "variantId": "7bd94f68-3f7f-4ba0-a6cb-4612b2cb130f",
+      "modifiers": [
+        { "modifierId": "2d6626d1-c1e0-4c8a-9ba1-c59fdb8a4dfe", "qty": 1 },
+        { "modifierId": "f86f6948-bcb0-4f16-a806-f54afd5b6ebc", "qty": 1 }
+      ]
+    }
+  ],
+  "discountCode": "HEMAT10",
+  "voucherCode": "VCR-2026-0001",
+  "loyaltyRedeemPoints": 100
+}
+```
+
+**Response**
+```json
+{
+  "success": true,
+  "message": "Transaksi berhasil dibuat",
+  "data": {
+    "transactionId": "72b0f29d-98f0-4cb7-bdd2-b69578b5c433",
+    "status": "PENDING",
+    "grossSubTotal": 44000,
+    "promoAmount": 0,
+    "discountAmount": 4400,
+    "netSubTotal": 39600,
+    "serviceCharge": 1980,
+    "totalTax": 4356,
+    "voucherAmount": 10000,
+    "loyaltyRedeemAmount": 10000,
+    "amountDue": 25936,
+    "items": [
+      {
+        "productId": "f9be39bf-5de3-4f4c-96aa-1eb41877e2ea",
+        "qty": 2,
+        "variantId": "7bd94f68-3f7f-4ba0-a6cb-4612b2cb130f",
+        "originalPrice": 22000,
+        "unitPrice": 22000,
+        "modifiers": [
+          { "modifierName": "Extra Shot", "additionalPrice": 4000, "qty": 1 },
+          { "modifierName": "Whipped Cream", "additionalPrice": 3000, "qty": 1 }
+        ]
+      }
+    ]
+  }
+}
+```
+
+#### 8.8.10 Error Response Contoh
+
+```json
+{
+  "success": false,
+  "message": "Variant tidak milik produk ini",
+  "data": null,
+  "errorCode": "VARIANT_PRODUCT_MISMATCH",
+  "timestamp": "2026-03-31T10:00:00Z"
+}
+```
 
 ---
 
