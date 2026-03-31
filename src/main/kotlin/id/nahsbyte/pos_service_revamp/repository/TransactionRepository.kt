@@ -16,4 +16,18 @@ interface TransactionRepository : JpaRepository<Transaction, Long> {
         endDate: LocalDateTime,
         pageable: Pageable
     ): Page<Transaction>
+
+    // Non-paginated for reporting
+    fun findAllByMerchantIdAndCreatedDateBetween(
+        merchantId: Long,
+        startDate: LocalDateTime,
+        endDate: LocalDateTime
+    ): List<Transaction>
+
+    fun findAllByMerchantIdAndOutletIdAndCreatedDateBetween(
+        merchantId: Long,
+        outletId: Long,
+        startDate: LocalDateTime,
+        endDate: LocalDateTime
+    ): List<Transaction>
 }

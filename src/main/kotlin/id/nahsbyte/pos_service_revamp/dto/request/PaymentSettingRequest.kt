@@ -3,6 +3,8 @@ package id.nahsbyte.pos_service_revamp.dto.request
 import java.math.BigDecimal
 
 data class CreatePaymentSettingRequest(
+    val outletId: Long? = null,
+    /** true = harga produk sudah include pajak (include tax), false = exclude tax */
     val isPriceIncludeTax: Boolean = false,
     val isRounding: Boolean = false,
     val roundingTarget: Int? = null,
@@ -10,13 +12,14 @@ data class CreatePaymentSettingRequest(
     val isServiceCharge: Boolean = false,
     val serviceChargePercentage: BigDecimal? = null,
     val serviceChargeAmount: BigDecimal? = null,
-    val isTax: Boolean = false,
-    val taxPercentage: BigDecimal? = null,
-    val taxName: String? = null
+    /** BEFORE_TAX | AFTER_TAX | DPP | AFTER_DISCOUNT */
+    val serviceChargeSource: String? = null
 )
 
 data class UpdatePaymentSettingRequest(
     val paymentSettingId: Long,
+    val outletId: Long? = null,
+    /** true = harga produk sudah include pajak (include tax), false = exclude tax */
     val isPriceIncludeTax: Boolean = false,
     val isRounding: Boolean = false,
     val roundingTarget: Int? = null,
@@ -24,7 +27,6 @@ data class UpdatePaymentSettingRequest(
     val isServiceCharge: Boolean = false,
     val serviceChargePercentage: BigDecimal? = null,
     val serviceChargeAmount: BigDecimal? = null,
-    val isTax: Boolean = false,
-    val taxPercentage: BigDecimal? = null,
-    val taxName: String? = null
+    /** BEFORE_TAX | AFTER_TAX | DPP | AFTER_DISCOUNT */
+    val serviceChargeSource: String? = null
 )

@@ -6,4 +6,6 @@ import java.util.Optional
 
 interface UserDetailRepository : JpaRepository<UserDetail, Long> {
     fun findByUsername(username: String): Optional<UserDetail>
+    fun findAllByMerchantId(merchantId: Long): List<UserDetail>
+    fun findByMerchantIdAndId(merchantId: Long, id: Long): Optional<UserDetail>
 }

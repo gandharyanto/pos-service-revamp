@@ -4,6 +4,8 @@ import java.math.BigDecimal
 
 data class PaymentSettingResponse(
     val paymentSettingId: Long,
+    val outletId: Long?,
+    /** true = include tax, false = exclude tax */
     val isPriceIncludeTax: Boolean,
     val isRounding: Boolean,
     val roundingTarget: Int?,
@@ -11,9 +13,7 @@ data class PaymentSettingResponse(
     val isServiceCharge: Boolean,
     val serviceChargePercentage: BigDecimal?,
     val serviceChargeAmount: BigDecimal?,
-    val isTax: Boolean,
-    val taxPercentage: BigDecimal?,
-    val taxName: String?
+    val serviceChargeSource: String?
 )
 
 data class PaymentMethodResponse(

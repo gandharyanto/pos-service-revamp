@@ -25,15 +25,29 @@ Authorization: Bearer <token>
 | 11 | DELETE | `/pos/product/delete/{productId}` | Hapus produk (soft delete) |
 | 12 | PUT    | `/pos/stock/update` | Update stok |
 | 13 | GET    | `/pos/stock/movement` | Riwayat pergerakan stok |
-| 14 | GET    | `/pos/payment-setting` | Get payment setting |
-| 15 | POST   | `/pos/payment-setting/create` | Buat payment setting |
+| 14 | GET    | `/pos/payment-setting` | Get payment setting default (tanpa outlet) |
+| 14a | GET   | `/pos/payment-setting/list` | Semua setting: default + per-outlet overrides |
+| 14b | GET   | `/pos/payment-setting/outlet/{outletId}` | Setting efektif untuk outlet (fallback ke default) |
+| 15 | POST   | `/pos/payment-setting/create` | Buat payment setting (default atau per-outlet) |
 | 16 | PUT    | `/pos/payment-setting/update` | Update payment setting |
 | 17 | GET    | `/pos/payment-method/merchant/list` | List metode pembayaran |
+| **Tax** | | | |
+| 75 | GET    | `/pos/tax/list` | List semua tarif pajak |
+| 76 | GET    | `/pos/tax/detail/{taxId}` | Detail tarif pajak |
+| 77 | POST   | `/pos/tax/add` | Tambah tarif pajak |
+| 78 | PUT    | `/pos/tax/update` | Update tarif pajak |
+| 79 | DELETE | `/pos/tax/delete/{taxId}` | Nonaktifkan tarif pajak |
 | 18 | GET    | `/pos/transaction/list` | List transaksi |
 | 19 | GET    | `/pos/transaction/detail/{transactionId}` | Detail transaksi |
 | 20 | POST   | `/pos/transaction/create` | Buat transaksi |
 | 21 | PUT    | `/pos/transaction/update/{merchantTrxId}` | Update transaksi / catat pembayaran |
-| 22 | GET    | `/pos/summary-report/list` | Laporan ringkasan |
+| 22 | GET    | `/pos/summary-report/list` | Laporan ringkasan (legacy) |
+| **Financial Report** | | | |
+| 104 | GET   | `/pos/report/summary` | Ringkasan keuangan: gross, net, tax, SC, diskon, rounding, refund |
+| 105 | GET   | `/pos/report/payment-method` | Breakdown per metode pembayaran |
+| 106 | GET   | `/pos/report/top-products` | Top produk terlaris (qty + revenue) |
+| 107 | GET   | `/pos/report/outlet` | Breakdown per outlet |
+| 108 | GET   | `/pos/report/disbursement` | Rekapitulasi disbursement per layer/penerima |
 | 23 | POST   | `/images/upload` | Upload gambar |
 | **Customer** | | | |
 | 24 | GET    | `/pos/customer/list` | List customer. `?phone=` / `?email=` untuk cari spesifik |
@@ -92,6 +106,34 @@ Authorization: Bearer <token>
 | 72 | DELETE | `/pos/loyalty/delete/{id}` | Hapus program |
 | 73 | GET    | `/pos/loyalty/product-setting/{productId}` | Get loyalty setting per produk |
 | 74 | PUT    | `/pos/loyalty/product-setting` | Set loyalty setting per produk |
+| **Cashier Management** | | | |
+| 80 | GET    | `/pos/cashier/list` | List kasir merchant |
+| 81 | GET    | `/pos/cashier/detail/{cashierId}` | Detail kasir |
+| 82 | POST   | `/pos/cashier/add` | Tambah kasir baru |
+| 83 | PUT    | `/pos/cashier/update` | Update data kasir |
+| 84 | DELETE | `/pos/cashier/delete/{cashierId}` | Nonaktifkan kasir |
+| 85 | PUT    | `/pos/cashier/set-pin` | Set PIN kasir untuk otorisasi refund |
+| 86 | PUT    | `/pos/cashier/reset-password` | Reset password kasir |
+| **Receipt Template** | | | |
+| 87 | GET    | `/pos/receipt-template/list` | List template struk |
+| 88 | GET    | `/pos/receipt-template/detail/{receiptId}` | Detail template |
+| 89 | GET    | `/pos/receipt-template/outlet/{outletId}` | Template efektif untuk outlet (fallback ke default) |
+| 90 | POST   | `/pos/receipt-template/add` | Buat template struk |
+| 91 | PUT    | `/pos/receipt-template/update` | Update template |
+| 92 | DELETE | `/pos/receipt-template/delete/{receiptId}` | Hapus template |
+| **Printer Settings** | | | |
+| 93 | GET    | `/pos/printer/list` | List printer. `?outletId=` untuk filter per outlet |
+| 94 | GET    | `/pos/printer/detail/{printerId}` | Detail printer |
+| 95 | POST   | `/pos/printer/add` | Tambah printer |
+| 96 | PUT    | `/pos/printer/update` | Update printer |
+| 97 | DELETE | `/pos/printer/delete/{printerId}` | Hapus printer |
+| **Disbursement (Revenue Sharing)** | | | |
+| 98  | GET    | `/pos/disbursement/rule/list` | List aturan disbursement. `?activeOnly=true` |
+| 99  | GET    | `/pos/disbursement/rule/detail/{ruleId}` | Detail aturan |
+| 100 | POST   | `/pos/disbursement/rule/add` | Tambah aturan disbursement |
+| 101 | PUT    | `/pos/disbursement/rule/update` | Update aturan |
+| 102 | DELETE | `/pos/disbursement/rule/delete/{ruleId}` | Nonaktifkan aturan |
+| 103 | GET    | `/pos/disbursement/log/list` | Log disbursement per transaksi. `?startDate=&endDate=` |
 
 ---
 
@@ -486,7 +528,13 @@ Setiap perubahan stok dicatat di tabel `stock_movement`.
 
 ## 5. Payment Setting
 
+Satu merchant bisa memiliki lebih dari satu record payment setting:
+- **Default** (`outletId = null`) — berlaku untuk semua outlet yang tidak punya override.
+- **Per-outlet override** (`outletId` terisi) — berlaku khusus untuk outlet tersebut.
+
 ### GET `/pos/payment-setting`
+
+Mengembalikan setting **default** (tanpa outlet).
 
 **Response 200:**
 ```json
@@ -495,6 +543,7 @@ Setiap perubahan stok dicatat di tabel `stock_movement`.
   "message": "Success",
   "data": {
     "paymentSettingId": 1,
+    "outletId": null,
     "isPriceIncludeTax": false,
     "isRounding": true,
     "roundingTarget": 100,
@@ -502,22 +551,39 @@ Setiap perubahan stok dicatat di tabel `stock_movement`.
     "isServiceCharge": true,
     "serviceChargePercentage": 5.00,
     "serviceChargeAmount": null,
-    "isTax": true,
-    "taxPercentage": 11.00,
-    "taxName": "PPN"
+    "serviceChargeSource": "AFTER_DISCOUNT"
   }
 }
 ```
 
 ---
 
+### GET `/pos/payment-setting/list`
+
+Mengembalikan **semua** setting merchant: default + seluruh per-outlet overrides.
+
+**Response 200:** Array of payment setting objects.
+
+---
+
+### GET `/pos/payment-setting/outlet/{outletId}`
+
+Mengembalikan setting **efektif** untuk outlet tertentu. Jika override tidak ada, fallback ke default.
+
+**Path Param:** `outletId` (Long)
+
+**Response 200:** Satu payment setting object.
+
+---
+
 ### POST `/pos/payment-setting/create`
 
-Hanya bisa dibuat sekali per merchant. Jika sudah ada, gunakan endpoint update.
+Satu record per scope (`outletId`). Jika sudah ada untuk scope yang sama, gunakan update.
 
 **Request Body:**
 ```json
 {
+  "outletId": null,
   "isPriceIncludeTax": false,
   "isRounding": true,
   "roundingTarget": 100,
@@ -525,27 +591,26 @@ Hanya bisa dibuat sekali per merchant. Jika sudah ada, gunakan endpoint update.
   "isServiceCharge": true,
   "serviceChargePercentage": 5.00,
   "serviceChargeAmount": null,
-  "isTax": true,
-  "taxPercentage": 11.00,
-  "taxName": "PPN"
+  "serviceChargeSource": "AFTER_DISCOUNT"
 }
 ```
 
 | Field | Tipe | Default | Keterangan |
 |-------|------|---------|-----------|
-| `isPriceIncludeTax` | Boolean | false | Harga produk sudah termasuk pajak |
+| `outletId` | Long | null | Null = berlaku semua outlet (default). Isi untuk per-outlet override. |
+| `isPriceIncludeTax` | Boolean | false | Harga produk sudah termasuk pajak (include tax) |
 | `isRounding` | Boolean | false | Aktifkan pembulatan |
 | `roundingTarget` | Int | null | Target pembulatan (mis: `100`, `500`, `1000`) |
 | `roundingType` | String | null | `UP` / `DOWN` / `NEAREST` |
 | `isServiceCharge` | Boolean | false | Aktifkan service charge |
 | `serviceChargePercentage` | BigDecimal | null | Persentase SC (%). Jika diisi, `serviceChargeAmount` diabaikan. |
 | `serviceChargeAmount` | BigDecimal | null | SC nominal tetap. Dipakai jika `serviceChargePercentage` null. |
-| `isTax` | Boolean | false | Aktifkan pajak global |
-| `taxPercentage` | BigDecimal | null | Persentase pajak (%) |
-| `taxName` | String | null | Nama pajak (mis: "PPN") |
+| `serviceChargeSource` | String | null | Basis kalkulasi SC: `BEFORE_TAX` \| `AFTER_TAX` \| `DPP` \| `AFTER_DISCOUNT` |
+
+> **Catatan:** Konfigurasi pajak (tarif, nama) dikelola terpisah melalui endpoint `/pos/tax`. `isPriceIncludeTax` di sini hanya menentukan apakah harga produk sudah include pajak atau belum (exclude).
 
 **Response 200:** Data payment setting yang baru dibuat.
-**Error 400:** Payment setting sudah ada untuk merchant ini.
+**Error 400:** Payment setting sudah ada untuk scope ini.
 
 ---
 
@@ -556,11 +621,103 @@ Hanya bisa dibuat sekali per merchant. Jika sudah ada, gunakan endpoint update.
 {
   "paymentSettingId": 1,
   "isPriceIncludeTax": false,
+  "serviceChargeSource": "AFTER_DISCOUNT",
   ...
 }
 ```
 
 **Response 200:** Data payment setting yang telah diupdate.
+
+---
+
+## 5a. Tax
+
+Tarif pajak yang dapat ditetapkan ke produk via `product.taxId`. Berbeda dari `payment_setting` yang mengatur pajak global — tabel ini untuk pajak bernama yang di-assign per produk.
+
+### GET `/pos/tax/list`
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Success",
+  "data": [
+    {
+      "id": 1,
+      "name": "PPN",
+      "percentage": 11.00,
+      "isActive": true,
+      "isDefault": true
+    },
+    {
+      "id": 2,
+      "name": "PPN Bebas",
+      "percentage": 0.00,
+      "isActive": true,
+      "isDefault": false
+    }
+  ]
+}
+```
+
+---
+
+### GET `/pos/tax/detail/{taxId}`
+
+**Path Param:** `taxId` (Long)
+
+**Response 200:** Satu objek tax.
+
+---
+
+### POST `/pos/tax/add`
+
+**Request Body:**
+```json
+{
+  "name": "PPN",
+  "percentage": 11.00,
+  "isDefault": true
+}
+```
+
+| Field | Tipe | Wajib | Keterangan |
+|-------|------|-------|-----------|
+| `name` | String | Ya | Nama tarif pajak |
+| `percentage` | BigDecimal | Ya | Persentase pajak |
+| `isDefault` | Boolean | Tidak (false) | Jadikan tarif default. Otomatis unset tarif default sebelumnya. |
+
+**Response 200:** Data tax yang baru dibuat.
+
+---
+
+### PUT `/pos/tax/update`
+
+**Request Body:**
+```json
+{
+  "taxId": 1,
+  "name": "PPN",
+  "percentage": 12.00,
+  "isDefault": true,
+  "isActive": true
+}
+```
+
+**Response 200:** Data tax yang telah diupdate.
+
+---
+
+### DELETE `/pos/tax/delete/{taxId}`
+
+Nonaktifkan tarif pajak (soft delete via `isActive = false`). Tax yang sudah di-assign ke produk tetap tersimpan di `product.taxId`.
+
+**Path Param:** `taxId` (Long)
+
+**Response 200:**
+```json
+{ "success": true, "message": "Tax deleted", "data": null }
+```
 
 ---
 
@@ -847,6 +1004,8 @@ Digunakan untuk mencatat pembayaran setelah transaksi dibuat, atau memperbarui s
 
 ### GET `/pos/summary-report/list`
 
+Endpoint legacy. Mengembalikan top produk + breakdown pembayaran internal/eksternal.
+
 **Query Params:**
 
 | Param | Tipe | Wajib | Keterangan |
@@ -875,9 +1034,198 @@ Digunakan untuk mencatat pembayaran setelah transaksi dibuat, atau memperbarui s
 }
 ```
 
-`productList` diurutkan berdasarkan jumlah item terjual terbanyak.
 `paymentListInternal` = metode yang mengandung kata CASH / CARD / DEBIT / CREDIT.
 `paymentListExternal` = metode lainnya (QRIS, e-wallet, dll).
+
+---
+
+### GET `/pos/report/summary`
+
+Ringkasan keuangan lengkap untuk rentang tanggal tertentu. Opsional filter per outlet.
+
+**Query Params:**
+
+| Param | Tipe | Wajib | Keterangan |
+|-------|------|-------|-----------|
+| `startDate` | String | Ya | Format: `YYYY-MM-DD` |
+| `endDate` | String | Ya | Format: `YYYY-MM-DD` |
+| `outletId` | Long | Tidak | Filter ke satu outlet saja |
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Success",
+  "data": {
+    "period": { "startDate": "2026-03-01", "endDate": "2026-03-31" },
+    "outletId": null,
+    "totalTransactions": 520,
+    "paidTransactions": 510,
+    "refundedTransactions": 5,
+    "grossRevenue": 25000000.00,
+    "totalDiscount": 800000.00,
+    "totalPromo": 500000.00,
+    "totalVoucher": 200000.00,
+    "totalLoyaltyRedeem": 150000.00,
+    "netRevenue": 23350000.00,
+    "totalTax": 2335000.00,
+    "totalServiceCharge": 1167500.00,
+    "totalRounding": 12500.00,
+    "totalAmount": 26865000.00,
+    "totalRefund": 350000.00
+  }
+}
+```
+
+**Kalkulasi:**
+- `grossRevenue` = subtotal setelah price book, sebelum promo/diskon (`gross_amount`)
+- `netRevenue` = subtotal setelah diskon + promo (`net_amount`)
+- `totalAmount` = net + tax + service charge + rounding
+
+---
+
+### GET `/pos/report/payment-method`
+
+Breakdown jumlah dan nilai transaksi per metode pembayaran.
+
+**Query Params:**
+
+| Param | Tipe | Wajib | Keterangan |
+|-------|------|-------|-----------|
+| `startDate` | String | Ya | Format: `YYYY-MM-DD` |
+| `endDate` | String | Ya | Format: `YYYY-MM-DD` |
+| `outletId` | Long | Tidak | Filter ke satu outlet saja |
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Success",
+  "data": [
+    { "paymentMethod": "CASH", "transactionCount": 250, "totalAmount": 12500000.00 },
+    { "paymentMethod": "QRIS", "transactionCount": 180, "totalAmount": 9200000.00 },
+    { "paymentMethod": "CARD", "transactionCount": 80, "totalAmount": 5165000.00 }
+  ]
+}
+```
+
+Diurutkan dari total terbesar ke terkecil.
+
+---
+
+### GET `/pos/report/top-products`
+
+Produk terlaris berdasarkan jumlah unit terjual, beserta total revenue.
+
+**Query Params:**
+
+| Param | Tipe | Wajib | Keterangan |
+|-------|------|-------|-----------|
+| `startDate` | String | Ya | Format: `YYYY-MM-DD` |
+| `endDate` | String | Ya | Format: `YYYY-MM-DD` |
+| `limit` | Int | Tidak | Jumlah produk (default: 10) |
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Success",
+  "data": [
+    { "rank": 1, "productName": "Es Teh Manis", "qtySold": 320, "totalRevenue": 4800000.00 },
+    { "rank": 2, "productName": "Nasi Goreng", "qtySold": 150, "totalRevenue": 7500000.00 }
+  ]
+}
+```
+
+Diurutkan berdasarkan `qtySold` terbanyak. Hanya transaksi berstatus `PAID` yang dihitung.
+
+---
+
+### GET `/pos/report/outlet`
+
+Perbandingan performa antar outlet dalam rentang tanggal tertentu.
+
+**Query Params:**
+
+| Param | Tipe | Wajib | Keterangan |
+|-------|------|-------|-----------|
+| `startDate` | String | Ya | Format: `YYYY-MM-DD` |
+| `endDate` | String | Ya | Format: `YYYY-MM-DD` |
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Success",
+  "data": [
+    {
+      "outletId": 1,
+      "totalTransactions": 310,
+      "grossRevenue": 15500000.00,
+      "netRevenue": 14200000.00,
+      "totalTax": 1420000.00,
+      "totalServiceCharge": 710000.00,
+      "totalAmount": 16330000.00
+    },
+    {
+      "outletId": 2,
+      "totalTransactions": 200,
+      "grossRevenue": 9500000.00,
+      "netRevenue": 9150000.00,
+      "totalTax": 915000.00,
+      "totalServiceCharge": 457500.00,
+      "totalAmount": 10535000.00
+    }
+  ]
+}
+```
+
+Diurutkan dari total penjualan terbesar ke terkecil.
+
+---
+
+### GET `/pos/report/disbursement`
+
+Rekapitulasi disbursement (revenue sharing) per rule/penerima untuk rentang tanggal.
+
+**Query Params:**
+
+| Param | Tipe | Wajib | Keterangan |
+|-------|------|-------|-----------|
+| `startDate` | String | Ya | Format: `YYYY-MM-DD` |
+| `endDate` | String | Ya | Format: `YYYY-MM-DD` |
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Success",
+  "data": [
+    {
+      "layer": "PLATFORM",
+      "recipientName": "iSeller Platform",
+      "percentage": 2.00,
+      "totalBaseAmount": 23350000.00,
+      "totalAmount": 467000.00,
+      "transactionCount": 510,
+      "settledCount": 500,
+      "pendingCount": 10
+    },
+    {
+      "layer": "MERCHANT",
+      "recipientName": "Merchant A",
+      "percentage": 95.00,
+      "totalBaseAmount": 23350000.00,
+      "totalAmount": 22182500.00,
+      "transactionCount": 510,
+      "settledCount": 500,
+      "pendingCount": 10
+    }
+  ]
+}
+```
+
+Diurutkan berdasarkan `layer` secara alphabetical.
 
 ---
 
@@ -1275,5 +1623,215 @@ Semua mismatch dikumpulkan dan dikembalikan sekaligus dalam satu response 422.
 5. **Snapshot transaksi** — `transaction_items` menyimpan `productName`, `price`, `taxName`, `taxPercentage` pada saat transaksi dibuat. Perubahan harga produk setelah transaksi tidak mempengaruhi data historis.
 
 6. **Kalkulasi transaksi** — Server melakukan validasi server-side terhadap semua nilai yang dikirim client. Lihat `docs/discount-simulation.md` untuk detail flow 5-layer (Price Book → Promotion → Discount Code → Voucher → Loyalty Redeem).
+
+---
+
+## Cashier Management
+
+Kelola user kasir per merchant. Setiap kasir punya akun login (`users`) dan detail merchant (`user_detail`). PIN dipakai untuk otorisasi operasi sensitif (refund).
+
+### GET `/pos/cashier/list`
+
+**Response 200:** Array of cashier objects.
+```json
+[
+  {
+    "id": 3,
+    "username": "kasir01",
+    "fullName": "Budi Santoso",
+    "email": "budi@merchant.com",
+    "employeeCode": "EMP-001",
+    "outletId": 1,
+    "isActive": true,
+    "hasPin": true,
+    "createdDate": "2026-01-01T09:00:00"
+  }
+]
+```
+
+---
+
+### POST `/pos/cashier/add`
+
+**Request Body:**
+```json
+{
+  "username": "kasir02",
+  "password": "password123",
+  "fullName": "Ani Rahayu",
+  "email": "ani@merchant.com",
+  "employeeCode": "EMP-002",
+  "outletId": 1
+}
+```
+
+| Field | Tipe | Wajib | Keterangan |
+|-------|------|-------|-----------|
+| `username` | String | Ya | Harus unik di seluruh sistem |
+| `password` | String | Ya | Di-hash BCrypt sebelum disimpan |
+| `fullName` | String | Tidak | Nama lengkap |
+| `email` | String | Tidak | Email kasir |
+| `employeeCode` | String | Tidak | Kode karyawan internal |
+| `outletId` | Long | Tidak | Outlet tempat kasir bertugas |
+
+**Error 400:** Username sudah digunakan.
+
+---
+
+### PUT `/pos/cashier/update`
+
+**Request Body:**
+```json
+{ "cashierId": 3, "fullName": "Ani Rahayu Updated", "outletId": 2, "isActive": true }
+```
+
+---
+
+### PUT `/pos/cashier/set-pin`
+
+Set atau ganti PIN kasir. PIN di-hash BCrypt sebelum disimpan.
+
+```json
+{ "cashierId": 3, "pin": "1234" }
+```
+
+---
+
+### PUT `/pos/cashier/reset-password`
+
+Reset password kasir oleh manager/admin.
+
+```json
+{ "cashierId": 3, "newPassword": "newpassword123" }
+```
+
+---
+
+## Receipt Template
+
+Template struk per merchant, bisa di-override per outlet. Satu record dengan `outletId = null` adalah default.
+
+### POST `/pos/receipt-template/add`
+
+**Request Body:**
+```json
+{
+  "outletId": null,
+  "header": "Selamat Datang di Toko Kami",
+  "footer": "Terima kasih telah berbelanja!",
+  "showTax": true,
+  "showServiceCharge": true,
+  "showRounding": true,
+  "showLogo": true,
+  "logoUrl": "https://cdn.example.com/logo.png",
+  "showQueueNumber": true,
+  "paperSize": "80mm"
+}
+```
+
+| Field | Tipe | Default | Keterangan |
+|-------|------|---------|-----------|
+| `outletId` | Long | null | Null = default semua outlet |
+| `header` | String | null | Teks header struk |
+| `footer` | String | null | Teks footer struk |
+| `showTax` | Boolean | true | Tampilkan baris pajak |
+| `showServiceCharge` | Boolean | true | Tampilkan service charge |
+| `showRounding` | Boolean | true | Tampilkan rounding |
+| `showLogo` | Boolean | false | Tampilkan logo merchant |
+| `logoUrl` | String | null | URL logo |
+| `showQueueNumber` | Boolean | true | Tampilkan nomor antrean |
+| `paperSize` | String | null | `58mm` \| `80mm` |
+
+**Error 400:** Template untuk scope ini sudah ada.
+
+---
+
+### GET `/pos/receipt-template/outlet/{outletId}`
+
+Mengembalikan template efektif untuk outlet. Jika override belum dibuat, fallback ke template default.
+
+---
+
+## Printer Settings
+
+Konfigurasi printer per merchant/outlet. Satu outlet bisa punya lebih dari satu printer dengan tipe berbeda (RECEIPT, KITCHEN, ORDER).
+
+### POST `/pos/printer/add`
+
+**Request Body:**
+```json
+{
+  "outletId": 1,
+  "type": "KITCHEN",
+  "name": "Printer Dapur",
+  "connectionType": "NETWORK",
+  "ipAddress": "192.168.1.100",
+  "port": 9100,
+  "paperSize": "80mm",
+  "isDefault": true
+}
+```
+
+| Field | Tipe | Default | Keterangan |
+|-------|------|---------|-----------|
+| `outletId` | Long | null | Outlet tujuan. Null = berlaku semua outlet. |
+| `type` | String | RECEIPT | `RECEIPT` \| `KITCHEN` \| `ORDER` |
+| `name` | String | Ya | Nama printer |
+| `connectionType` | String | null | `NETWORK` \| `USB` \| `BLUETOOTH` |
+| `ipAddress` | String | null | IP untuk NETWORK |
+| `port` | Int | null | Port untuk NETWORK (biasanya 9100) |
+| `paperSize` | String | null | `58mm` \| `80mm` |
+| `isDefault` | Boolean | false | Printer default untuk type ini di outlet ini |
+
+> Jika `isDefault = true`, printer default sebelumnya untuk type+outlet yang sama otomatis di-unset.
+
+---
+
+### GET `/pos/printer/list`
+
+`?outletId=1` untuk filter per outlet. Tanpa param = semua printer merchant.
+
+---
+
+## Disbursement (Revenue Sharing)
+
+Atur pembagian pendapatan dari setiap transaksi ke berbagai pihak (Platform, Dealer, Merchant).
+
+### POST `/pos/disbursement/rule/add`
+
+**Request Body:**
+```json
+{
+  "name": "Dealer Fee",
+  "layer": "DEALER",
+  "recipientId": 5,
+  "recipientName": "PT Distributor ABC",
+  "percentage": 2.50,
+  "source": "NET",
+  "productTypeFilter": null,
+  "displayOrder": 1
+}
+```
+
+| Field | Tipe | Default | Keterangan |
+|-------|------|---------|-----------|
+| `name` | String | Ya | Nama aturan |
+| `layer` | String | MERCHANT | `PLATFORM` \| `DEALER` \| `MERCHANT` \| `CUSTOM` |
+| `recipientId` | Long | null | ID penerima |
+| `recipientName` | String | null | Nama penerima |
+| `percentage` | BigDecimal | Ya | Persentase dari base amount |
+| `source` | String | NET | `GROSS` \| `NET` \| `NET_AFTER_TAX` \| `NET_AFTER_TAX_SC` |
+| `productTypeFilter` | String | null | Filter jenis produk. Null = semua produk. |
+| `displayOrder` | Int | null | Urutan eksekusi |
+
+---
+
+### GET `/pos/disbursement/log/list`
+
+Riwayat disbursement per transaksi. Dibuat otomatis oleh sistem saat transaksi selesai.
+
+**Query Params:** `startDate` (YYYY-MM-DD), `endDate` (YYYY-MM-DD) — opsional.
+
+**Response 200:** Array of log objects dengan field: `transactionId`, `ruleId`, `recipientName`, `layer`, `baseAmount`, `percentage`, `amount`, `status` (`PENDING`\|`SETTLED`\|`FAILED`), `createdDate`, `settledDate`.
 
 7. **Endpoint Customer, OrderType, CashierShift, Voucher, Loyalty, Discount, Promotion, PriceBook** (no. 24–80) belum memiliki dokumentasi request/response detail di dokumen ini. Lihat docs masing-masing modul: `docs/voucher.md`, `docs/loyalty.md`, `docs/discount-simulation.md`.

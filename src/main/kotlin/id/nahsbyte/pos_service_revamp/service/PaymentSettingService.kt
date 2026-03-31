@@ -22,18 +22,36 @@ class PaymentSettingService(
     private val merchantPaymentMethodRepository: MerchantPaymentMethodRepository
 ) {
 
+    /** Default setting (outlet_id IS NULL). Untuk outlet-specific, gunakan getByOutlet. */
     fun get(merchantId: Long): PaymentSettingResponse =
-        paymentSettingRepository.findByMerchantId(merchantId)
+        paymentSettingRepository.findByMerchantIdAndOutletIdIsNull(merchantId)
             .orElseThrow { ResourceNotFoundException("Payment setting not found") }
             .toResponse()
 
+    /** Semua setting merchant: default + per-outlet overrides */
+    fun list(merchantId: Long): List<PaymentSettingResponse> =
+        paymentSettingRepository.findAllByMerchantId(merchantId).map { it.toResponse() }
+
+    /** Ambil setting efektif untuk outlet tertentu. Falls back ke default jika override tidak ada. */
+    fun getByOutlet(merchantId: Long, outletId: Long): PaymentSettingResponse =
+        (paymentSettingRepository.findByMerchantIdAndOutletId(merchantId, outletId)
+            .or { paymentSettingRepository.findByMerchantIdAndOutletIdIsNull(merchantId) })
+            .map { it.toResponse() }
+            .orElseThrow { ResourceNotFoundException("Payment setting not found") }
+
     @Transactional
     fun create(merchantId: Long, username: String, request: CreatePaymentSettingRequest): PaymentSettingResponse {
-        if (paymentSettingRepository.findByMerchantId(merchantId).isPresent)
-            throw BusinessException("Payment setting already exists. Use update endpoint.")
+        val existing = if (request.outletId != null)
+            paymentSettingRepository.findByMerchantIdAndOutletId(merchantId, request.outletId)
+        else
+            paymentSettingRepository.findByMerchantIdAndOutletIdIsNull(merchantId)
+
+        if (existing.isPresent)
+            throw BusinessException("Payment setting already exists for this scope. Use update endpoint.")
 
         val setting = PaymentSetting().apply {
             this.merchantId = merchantId
+            outletId = request.outletId
             isPriceIncludeTax = request.isPriceIncludeTax
             isRounding = request.isRounding
             roundingTarget = request.roundingTarget
@@ -41,9 +59,7 @@ class PaymentSettingService(
             isServiceCharge = request.isServiceCharge
             serviceChargePercentage = request.serviceChargePercentage
             serviceChargeAmount = request.serviceChargeAmount
-            isTax = request.isTax
-            taxPercentage = request.taxPercentage
-            taxName = request.taxName
+            serviceChargeSource = request.serviceChargeSource
             createdBy = username
             createdDate = LocalDateTime.now()
             modifiedBy = username
@@ -66,9 +82,7 @@ class PaymentSettingService(
             isServiceCharge = request.isServiceCharge
             serviceChargePercentage = request.serviceChargePercentage
             serviceChargeAmount = request.serviceChargeAmount
-            isTax = request.isTax
-            taxPercentage = request.taxPercentage
-            taxName = request.taxName
+            serviceChargeSource = request.serviceChargeSource
             modifiedBy = username
             modifiedDate = LocalDateTime.now()
         }
@@ -96,6 +110,7 @@ class PaymentSettingService(
 
     private fun PaymentSetting.toResponse() = PaymentSettingResponse(
         paymentSettingId = id,
+        outletId = outletId,
         isPriceIncludeTax = isPriceIncludeTax,
         isRounding = isRounding,
         roundingTarget = roundingTarget,
@@ -103,8 +118,6 @@ class PaymentSettingService(
         isServiceCharge = isServiceCharge,
         serviceChargePercentage = serviceChargePercentage,
         serviceChargeAmount = serviceChargeAmount,
-        isTax = isTax,
-        taxPercentage = taxPercentage,
-        taxName = taxName
+        serviceChargeSource = serviceChargeSource
     )
 }

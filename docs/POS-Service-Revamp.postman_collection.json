@@ -1,0 +1,608 @@
+{
+  "info": {
+    "name": "POS Service Revamp",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
+    { "key": "token",   "value": "",                      "type": "string" }
+  ],
+  "item": [
+
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "var json = pm.response.json();",
+            "if (json.data && json.data.token) { pm.collectionVariables.set('token', json.data.token); }"
+          ], "type": "text/javascript" }}],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/pos/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"kasir01\",\n  \"password\": \"password123\"\n}" }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "Category",
+      "item": [
+        {
+          "name": "List Kategori",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/category/list?page=0&size=20", "host": ["{{baseUrl}}"], "path": ["pos","category","list"], "query": [{"key":"page","value":"0"},{"key":"size","value":"20"}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Detail Kategori",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/category/detail/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Tambah Kategori",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/category/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Minuman\",\n  \"image\": null,\n  \"description\": \"Kategori minuman\"\n}" } }
+        },
+        {
+          "name": "Update Kategori",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/category/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"categoryId\": 1,\n  \"name\": \"Minuman Segar\",\n  \"image\": null,\n  \"description\": \"Update deskripsi\"\n}" } }
+        },
+        {
+          "name": "Hapus Kategori",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/pos/category/delete/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        }
+      ]
+    },
+
+    {
+      "name": "Product",
+      "item": [
+        {
+          "name": "List Produk",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/product/list?page=0&size=20", "host": ["{{baseUrl}}"], "path": ["pos","product","list"], "query": [{"key":"page","value":"0"},{"key":"size","value":"20"},{"key":"keyword","value":"","disabled":true},{"key":"categoryId","value":"","disabled":true}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Detail Produk",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/product/detail/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Tambah Produk",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/product/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Kopi Susu\",\n  \"price\": 25000,\n  \"sku\": \"KPI-001\",\n  \"upc\": null,\n  \"imageUrl\": null,\n  \"imageThumbUrl\": null,\n  \"description\": \"Kopi susu spesial\",\n  \"qty\": 100,\n  \"categoryIds\": [1]\n}" } }
+        },
+        {
+          "name": "Update Produk",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/product/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"productId\": 1,\n  \"name\": \"Kopi Susu Special\",\n  \"price\": 28000,\n  \"sku\": \"KPI-001\",\n  \"categoryIds\": [1]\n}" } }
+        },
+        {
+          "name": "Hapus Produk",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/pos/product/delete/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        }
+      ]
+    },
+
+    {
+      "name": "Stock",
+      "item": [
+        {
+          "name": "Update Stok",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/stock/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"productId\": 1,\n  \"qty\": 20,\n  \"updateType\": \"ADD\"\n}" } }
+        },
+        {
+          "name": "Riwayat Stok",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/stock/movement?productId=1&startDate=2026-01-01&endDate=2026-12-31", "host": ["{{baseUrl}}"], "path": ["pos","stock","movement"], "query": [{"key":"productId","value":"1"},{"key":"startDate","value":"2026-01-01"},{"key":"endDate","value":"2026-12-31"}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        }
+      ]
+    },
+
+    {
+      "name": "Tax",
+      "item": [
+        {
+          "name": "List Pajak",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/tax/list", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Detail Pajak",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/tax/detail/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Tambah Pajak",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/tax/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"PPN\",\n  \"percentage\": 11.00,\n  \"isDefault\": true\n}" } }
+        },
+        {
+          "name": "Update Pajak",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/tax/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"taxId\": 1,\n  \"name\": \"PPN\",\n  \"percentage\": 12.00,\n  \"isDefault\": true,\n  \"isActive\": true\n}" } }
+        },
+        {
+          "name": "Hapus Pajak",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/pos/tax/delete/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        }
+      ]
+    },
+
+    {
+      "name": "Payment Setting",
+      "item": [
+        {
+          "name": "Get Setting Default",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/payment-setting", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "List Semua Setting",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/payment-setting/list", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Get Setting per Outlet",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/payment-setting/outlet/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Buat Payment Setting",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/payment-setting/create", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"outletId\": null,\n  \"isPriceIncludeTax\": false,\n  \"isRounding\": true,\n  \"roundingTarget\": 100,\n  \"roundingType\": \"NEAREST\",\n  \"isServiceCharge\": true,\n  \"serviceChargePercentage\": 5.00,\n  \"serviceChargeAmount\": null,\n  \"serviceChargeSource\": \"AFTER_DISCOUNT\"\n}" } }
+        },
+        {
+          "name": "Update Payment Setting",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/payment-setting/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"paymentSettingId\": 1,\n  \"outletId\": null,\n  \"isPriceIncludeTax\": false,\n  \"isRounding\": true,\n  \"roundingTarget\": 1000,\n  \"roundingType\": \"NEAREST\",\n  \"isServiceCharge\": true,\n  \"serviceChargePercentage\": 5.00,\n  \"serviceChargeAmount\": null,\n  \"serviceChargeSource\": \"AFTER_DISCOUNT\"\n}" } }
+        },
+        {
+          "name": "List Metode Pembayaran",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/payment-method/merchant/list", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        }
+      ]
+    },
+
+    {
+      "name": "Transaction",
+      "item": [
+        {
+          "name": "List Transaksi",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/transaction/list?page=0&size=20&startDate=2026-01-01&endDate=2026-12-31&sortBy=createdDate&sortType=DESC", "host": ["{{baseUrl}}"], "path": ["pos","transaction","list"], "query": [{"key":"page","value":"0"},{"key":"size","value":"20"},{"key":"startDate","value":"2026-01-01"},{"key":"endDate","value":"2026-12-31"},{"key":"sortBy","value":"createdDate"},{"key":"sortType","value":"DESC"}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Detail Transaksi",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/transaction/detail/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Buat Transaksi (Cash)",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/transaction/create", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"subTotal\": 48100,\n  \"totalServiceCharge\": 2405,\n  \"totalTax\": 5556,\n  \"totalRounding\": -61,\n  \"totalAmount\": 56000,\n  \"paymentMethod\": \"CASH\",\n  \"cashTendered\": 60000,\n  \"cashChange\": 4000,\n  \"priceIncludeTax\": false,\n  \"orderTypeId\": null,\n  \"customerId\": null,\n  \"discountCode\": null,\n  \"promoAmount\": null,\n  \"discountAmount\": null,\n  \"voucherCode\": null,\n  \"voucherAmount\": null,\n  \"loyaltyRedeemPoints\": null,\n  \"loyaltyRedeemMode\": null,\n  \"loyaltyRedeemAmount\": null,\n  \"transactionItems\": [\n    { \"productId\": 1, \"qty\": 2, \"price\": 25000, \"totalPrice\": 50000 }\n  ]\n}" } }
+        },
+        {
+          "name": "Buat Transaksi (Voucher + Loyalty)",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/transaction/create", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"subTotal\": 100000,\n  \"totalServiceCharge\": 5000,\n  \"totalTax\": 11550,\n  \"totalRounding\": 0,\n  \"totalAmount\": 91550,\n  \"paymentMethod\": \"CASH\",\n  \"cashTendered\": 91550,\n  \"cashChange\": 0,\n  \"orderTypeId\": null,\n  \"customerId\": 1,\n  \"voucherCode\": \"VCH-ABC123\",\n  \"voucherAmount\": 20000,\n  \"loyaltyRedeemPoints\": 500,\n  \"loyaltyRedeemMode\": \"PAYMENT\",\n  \"loyaltyRedeemAmount\": 5000,\n  \"transactionItems\": [\n    { \"productId\": 1, \"qty\": 2, \"price\": 50000, \"totalPrice\": 100000 }\n  ]\n}" } }
+        },
+        {
+          "name": "Update Transaksi / Catat Pembayaran",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/transaction/update/TRX-001", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"paymentTrxId\": \"EXT-TRX-123\",\n  \"paymentMethod\": \"QRIS\",\n  \"amountPaid\": 56000,\n  \"status\": \"PAID\",\n  \"paymentReference\": \"REF-XYZ\",\n  \"paymentDate\": \"2026-03-31\"\n}" } }
+        }
+      ]
+    },
+
+    {
+      "name": "Financial Report",
+      "item": [
+        {
+          "name": "Laporan Ringkasan (Legacy)",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/summary-report/list?startDate=2026-01-01&endDate=2026-03-31", "host": ["{{baseUrl}}"], "path": ["pos","summary-report","list"], "query": [{"key":"startDate","value":"2026-01-01"},{"key":"endDate","value":"2026-03-31"}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Ringkasan Keuangan",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/report/summary?startDate=2026-03-01&endDate=2026-03-31", "host": ["{{baseUrl}}"], "path": ["pos","report","summary"], "query": [{"key":"startDate","value":"2026-03-01"},{"key":"endDate","value":"2026-03-31"},{"key":"outletId","value":"","disabled":true}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Breakdown Metode Pembayaran",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/report/payment-method?startDate=2026-03-01&endDate=2026-03-31", "host": ["{{baseUrl}}"], "path": ["pos","report","payment-method"], "query": [{"key":"startDate","value":"2026-03-01"},{"key":"endDate","value":"2026-03-31"},{"key":"outletId","value":"","disabled":true}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Top Produk Terlaris",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/report/top-products?startDate=2026-03-01&endDate=2026-03-31&limit=10", "host": ["{{baseUrl}}"], "path": ["pos","report","top-products"], "query": [{"key":"startDate","value":"2026-03-01"},{"key":"endDate","value":"2026-03-31"},{"key":"limit","value":"10"}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Breakdown Per Outlet",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/report/outlet?startDate=2026-03-01&endDate=2026-03-31", "host": ["{{baseUrl}}"], "path": ["pos","report","outlet"], "query": [{"key":"startDate","value":"2026-03-01"},{"key":"endDate","value":"2026-03-31"}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Rekap Disbursement",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/report/disbursement?startDate=2026-03-01&endDate=2026-03-31", "host": ["{{baseUrl}}"], "path": ["pos","report","disbursement"], "query": [{"key":"startDate","value":"2026-03-01"},{"key":"endDate","value":"2026-03-31"}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        }
+      ]
+    },
+
+    {
+      "name": "Customer (CRM)",
+      "item": [
+        {
+          "name": "List Customer",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/customer/list?page=0&size=20", "host": ["{{baseUrl}}"], "path": ["pos","customer","list"], "query": [{"key":"page","value":"0"},{"key":"size","value":"20"},{"key":"phone","value":"","disabled":true},{"key":"email","value":"","disabled":true}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Detail Customer",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/customer/detail/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Tambah Customer",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/customer/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Budi Santoso\",\n  \"phone\": \"081234567890\",\n  \"email\": \"budi@email.com\",\n  \"address\": null,\n  \"gender\": \"MALE\"\n}" } }
+        },
+        {
+          "name": "Update Customer",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/customer/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"customerId\": 1,\n  \"name\": \"Budi Santoso\",\n  \"phone\": \"081234567890\",\n  \"email\": \"budi@email.com\"\n}" } }
+        },
+        {
+          "name": "Hapus Customer",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/pos/customer/delete/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Adjust Poin Loyalty Manual",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/customer/loyalty/adjust", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"customerId\": 1,\n  \"points\": 100,\n  \"type\": \"ADD\",\n  \"note\": \"Bonus poin manual\"\n}" } }
+        },
+        {
+          "name": "Riwayat Poin Customer",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/customer/1/loyalty-history", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        }
+      ]
+    },
+
+    {
+      "name": "Order Type",
+      "item": [
+        {
+          "name": "List Order Type",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/order-type/list", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Tambah Order Type",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/order-type/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Dine In\",\n  \"code\": \"DINE_IN\",\n  \"isDefault\": true,\n  \"isActive\": true\n}" } }
+        },
+        {
+          "name": "Update Order Type",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/order-type/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": 1,\n  \"name\": \"Dine In\",\n  \"code\": \"DINE_IN\",\n  \"isDefault\": true,\n  \"isActive\": true\n}" } }
+        },
+        {
+          "name": "Hapus Order Type",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/pos/order-type/delete/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        }
+      ]
+    },
+
+    {
+      "name": "Cashier Shift",
+      "item": [
+        {
+          "name": "Buka Shift",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/shift/open", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"outletId\": 1,\n  \"openingCash\": 500000,\n  \"note\": null\n}" } }
+        },
+        {
+          "name": "Tutup Shift",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/shift/close", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"shiftId\": 1,\n  \"closingCash\": 750000,\n  \"note\": \"Shift pagi selesai\"\n}" } }
+        },
+        {
+          "name": "Riwayat Shift",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/shift/list/1?status=OPEN", "host": ["{{baseUrl}}"], "path": ["pos","shift","list","1"], "query": [{"key":"status","value":"OPEN","disabled":true}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        }
+      ]
+    },
+
+    {
+      "name": "Discount",
+      "item": [
+        {
+          "name": "List Diskon",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/discount/list", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Detail Diskon",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/discount/detail/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Tambah Diskon",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/discount/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Diskon 10%\",\n  \"code\": \"SAVE10\",\n  \"valueType\": \"PERCENTAGE\",\n  \"value\": 10,\n  \"maxDiscountAmount\": null,\n  \"minPurchase\": 100000,\n  \"scope\": \"ALL\",\n  \"channel\": \"BOTH\",\n  \"visibility\": \"ALL_OUTLET\",\n  \"usageLimit\": null,\n  \"usagePerCustomer\": 1,\n  \"startDate\": \"2026-01-01T00:00:00\",\n  \"endDate\": \"2026-12-31T23:59:59\",\n  \"outletIds\": [],\n  \"productIds\": [],\n  \"categoryIds\": [],\n  \"customerIds\": [],\n  \"paymentMethodCodes\": []\n}" } }
+        },
+        {
+          "name": "Update Diskon",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/discount/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": 1,\n  \"name\": \"Diskon 10% Updated\",\n  \"code\": \"SAVE10\",\n  \"valueType\": \"PERCENTAGE\",\n  \"value\": 10,\n  \"minPurchase\": 100000,\n  \"scope\": \"ALL\",\n  \"channel\": \"BOTH\",\n  \"visibility\": \"ALL_OUTLET\",\n  \"startDate\": \"2026-01-01T00:00:00\",\n  \"endDate\": \"2026-12-31T23:59:59\",\n  \"outletIds\": [],\n  \"productIds\": [],\n  \"categoryIds\": [],\n  \"customerIds\": [],\n  \"paymentMethodCodes\": []\n}" } }
+        },
+        {
+          "name": "Hapus Diskon",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/pos/discount/delete/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Validasi Kode Diskon",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/discount/validate", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"SAVE10\",\n  \"outletId\": 1,\n  \"customerId\": null,\n  \"grossSubTotal\": 150000,\n  \"orderTypeId\": null\n}" } }
+        }
+      ]
+    },
+
+    {
+      "name": "Promotion",
+      "item": [
+        {
+          "name": "List Promosi",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/promotion/list", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Detail Promosi",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/promotion/detail/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Tambah Promosi (DISCOUNT_BY_ORDER)",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/promotion/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Diskon 10% min 50rb\",\n  \"promoType\": \"DISCOUNT_BY_ORDER\",\n  \"priority\": 1,\n  \"canCombine\": false,\n  \"valueType\": \"PERCENTAGE\",\n  \"value\": 10,\n  \"minPurchase\": 50000,\n  \"channel\": \"BOTH\",\n  \"visibility\": \"ALL_OUTLET\",\n  \"startDate\": \"2026-01-01T00:00:00\",\n  \"endDate\": \"2026-12-31T23:59:59\",\n  \"validDays\": null,\n  \"outletIds\": [],\n  \"customerIds\": [],\n  \"buyProductIds\": [],\n  \"rewardProductIds\": []\n}" } }
+        },
+        {
+          "name": "Tambah Promosi (BUY_X_GET_Y)",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/promotion/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Beli 2 Gratis 1\",\n  \"promoType\": \"BUY_X_GET_Y\",\n  \"priority\": 2,\n  \"canCombine\": true,\n  \"buyQty\": 2,\n  \"getQty\": 1,\n  \"allowMultiple\": true,\n  \"rewardType\": \"FREE\",\n  \"rewardValue\": null,\n  \"buyScope\": \"PRODUCT\",\n  \"rewardScope\": \"PRODUCT\",\n  \"channel\": \"BOTH\",\n  \"visibility\": \"ALL_OUTLET\",\n  \"startDate\": \"2026-01-01T00:00:00\",\n  \"endDate\": \"2026-12-31T23:59:59\",\n  \"validDays\": \"MON,TUE,WED,THU,FRI,SAT,SUN\",\n  \"outletIds\": [],\n  \"customerIds\": [],\n  \"buyProductIds\": [1],\n  \"rewardProductIds\": [1]\n}" } }
+        },
+        {
+          "name": "Update Promosi",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/promotion/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": 1,\n  \"name\": \"Diskon 10% min 50rb Updated\",\n  \"promoType\": \"DISCOUNT_BY_ORDER\",\n  \"priority\": 1,\n  \"canCombine\": false,\n  \"valueType\": \"PERCENTAGE\",\n  \"value\": 10,\n  \"minPurchase\": 50000,\n  \"channel\": \"BOTH\",\n  \"visibility\": \"ALL_OUTLET\"\n}" } }
+        },
+        {
+          "name": "Hapus Promosi",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/pos/promotion/delete/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        }
+      ]
+    },
+
+    {
+      "name": "Price Book",
+      "item": [
+        {
+          "name": "List Price Book",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/price-book/list", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Detail Price Book",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/price-book/detail/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Tambah Price Book (ORDER_TYPE)",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/price-book/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Harga Dine In\",\n  \"type\": \"ORDER_TYPE\",\n  \"orderTypeId\": 1,\n  \"visibility\": \"ALL_OUTLET\",\n  \"isDefault\": false,\n  \"isActive\": true,\n  \"items\": [\n    { \"productId\": 1, \"price\": 25000 },\n    { \"productId\": 2, \"price\": 18000 }\n  ]\n}" } }
+        },
+        {
+          "name": "Tambah Price Book (WHOLESALE)",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/price-book/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Harga Grosir Kopi\",\n  \"type\": \"WHOLESALE\",\n  \"visibility\": \"ALL_OUTLET\",\n  \"isDefault\": false,\n  \"isActive\": true,\n  \"wholesaleTiers\": [\n    { \"productId\": 1, \"minQty\": 1,  \"maxQty\": 2,    \"price\": 20000 },\n    { \"productId\": 1, \"minQty\": 3,  \"maxQty\": 5,    \"price\": 18000 },\n    { \"productId\": 1, \"minQty\": 6,  \"maxQty\": null, \"price\": 15000 }\n  ]\n}" } }
+        },
+        {
+          "name": "Update Price Book",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/price-book/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": 1,\n  \"name\": \"Harga Dine In Updated\",\n  \"isActive\": true,\n  \"items\": [\n    { \"productId\": 1, \"price\": 27000 }\n  ]\n}" } }
+        },
+        {
+          "name": "Hapus Price Book",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/pos/price-book/delete/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        }
+      ]
+    },
+
+    {
+      "name": "Voucher",
+      "item": [
+        {
+          "name": "List Brand",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/voucher/brand/list", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Detail Brand",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/voucher/brand/detail/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Tambah Brand",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/voucher/brand/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Ultra Voucher\",\n  \"logoUrl\": null\n}" } }
+        },
+        {
+          "name": "Update Brand",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/voucher/brand/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": 1,\n  \"name\": \"Ultra Voucher Updated\",\n  \"logoUrl\": null,\n  \"isActive\": true\n}" } }
+        },
+        {
+          "name": "Hapus Brand",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/pos/voucher/brand/delete/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Tambah Group",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/voucher/group/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"brandId\": 1,\n  \"name\": \"Voucher 100rb\",\n  \"purchasePrice\": 90000,\n  \"sellingPrice\": 100000,\n  \"expiredDate\": \"2026-12-31T23:59:59\",\n  \"validDays\": null,\n  \"isRequiredCustomer\": false,\n  \"channel\": \"BOTH\"\n}" } }
+        },
+        {
+          "name": "Update Group",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/voucher/group/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": 1,\n  \"name\": \"Voucher 100rb Updated\",\n  \"purchasePrice\": 90000,\n  \"sellingPrice\": 100000,\n  \"isActive\": true\n}" } }
+        },
+        {
+          "name": "Hapus Group",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/pos/voucher/group/delete/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "List Kode Voucher",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/voucher/code/list?groupId=1", "host": ["{{baseUrl}}"], "path": ["pos","voucher","code","list"], "query": [{"key":"groupId","value":"1"}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Tambah Kode Voucher",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/voucher/code/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"groupId\": 1,\n  \"code\": \"VCH-ABC123\"\n}" } }
+        },
+        {
+          "name": "Bulk Import Kode",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/voucher/code/bulk-import", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"groupId\": 1,\n  \"codes\": [\"VCH-001\", \"VCH-002\", \"VCH-003\"]\n}" } }
+        },
+        {
+          "name": "Batalkan Kode",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/voucher/code/cancel/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        }
+      ]
+    },
+
+    {
+      "name": "Loyalty",
+      "item": [
+        {
+          "name": "List Program",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/loyalty/list?isActive=true", "host": ["{{baseUrl}}"], "path": ["pos","loyalty","list"], "query": [{"key":"isActive","value":"true","disabled":true}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Detail Program",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/loyalty/detail/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Tambah Program",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/loyalty/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Program Poin Reguler\",\n  \"earnMode\": \"RATIO\",\n  \"pointsPerAmount\": 10000,\n  \"earnMultiplier\": null,\n  \"expiryMode\": \"NONE\",\n  \"expiryDays\": null,\n  \"expiryDate\": null,\n  \"isActive\": true,\n  \"redemptionRules\": [\n    {\n      \"type\": \"PAYMENT\",\n      \"redeemRate\": 100,\n      \"minRedeemPoints\": 10,\n      \"maxRedeemPoints\": null\n    }\n  ]\n}" } }
+        },
+        {
+          "name": "Update Program",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/loyalty/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"id\": 1,\n  \"name\": \"Program Poin Reguler\",\n  \"earnMode\": \"RATIO\",\n  \"pointsPerAmount\": 10000,\n  \"isActive\": true,\n  \"redemptionRules\": []\n}" } }
+        },
+        {
+          "name": "Hapus Program",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/pos/loyalty/delete/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Get Loyalty Setting Produk",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/loyalty/product-setting/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Set Loyalty Setting Produk",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/loyalty/product-setting", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"productId\": 1,\n  \"isLoyaltyEnabled\": true,\n  \"fixedPoints\": null\n}" } }
+        }
+      ]
+    },
+
+    {
+      "name": "Cashier Management",
+      "item": [
+        {
+          "name": "List Kasir",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/cashier/list", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Detail Kasir",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/cashier/detail/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Tambah Kasir",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/cashier/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"kasir02\",\n  \"password\": \"password123\",\n  \"fullName\": \"Ani Rahayu\",\n  \"email\": \"ani@merchant.com\",\n  \"employeeCode\": \"EMP-002\",\n  \"outletId\": 1\n}" } }
+        },
+        {
+          "name": "Update Kasir",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/cashier/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"cashierId\": 1,\n  \"fullName\": \"Ani Rahayu Updated\",\n  \"email\": \"ani@merchant.com\",\n  \"employeeCode\": \"EMP-002\",\n  \"outletId\": 1,\n  \"isActive\": true\n}" } }
+        },
+        {
+          "name": "Nonaktifkan Kasir",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/pos/cashier/delete/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Set PIN Kasir",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/cashier/set-pin", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"cashierId\": 1,\n  \"pin\": \"1234\"\n}" } }
+        },
+        {
+          "name": "Reset Password Kasir",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/cashier/reset-password", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"cashierId\": 1,\n  \"newPassword\": \"newpassword123\"\n}" } }
+        }
+      ]
+    },
+
+    {
+      "name": "Receipt Template",
+      "item": [
+        {
+          "name": "List Template",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/receipt-template/list", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Detail Template",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/receipt-template/detail/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Template Efektif per Outlet",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/receipt-template/outlet/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Buat Template (Default)",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/receipt-template/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"outletId\": null,\n  \"header\": \"Selamat Datang!\",\n  \"footer\": \"Terima kasih telah berbelanja.\",\n  \"showTax\": true,\n  \"showServiceCharge\": true,\n  \"showRounding\": true,\n  \"showLogo\": false,\n  \"logoUrl\": null,\n  \"showQueueNumber\": true,\n  \"paperSize\": \"80mm\"\n}" } }
+        },
+        {
+          "name": "Buat Template (Per Outlet)",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/receipt-template/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"outletId\": 1,\n  \"header\": \"Outlet Sudirman\",\n  \"footer\": \"Hubungi kami: 021-xxx\",\n  \"showTax\": true,\n  \"showServiceCharge\": true,\n  \"showRounding\": false,\n  \"showLogo\": true,\n  \"logoUrl\": \"https://cdn.example.com/logo.png\",\n  \"showQueueNumber\": true,\n  \"paperSize\": \"58mm\"\n}" } }
+        },
+        {
+          "name": "Update Template",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/receipt-template/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"receiptId\": 1,\n  \"header\": \"Header Updated\",\n  \"footer\": \"Footer Updated\",\n  \"showTax\": true,\n  \"showServiceCharge\": true,\n  \"showRounding\": true,\n  \"showLogo\": false,\n  \"logoUrl\": null,\n  \"showQueueNumber\": true,\n  \"paperSize\": \"80mm\"\n}" } }
+        },
+        {
+          "name": "Hapus Template",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/pos/receipt-template/delete/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        }
+      ]
+    },
+
+    {
+      "name": "Printer Settings",
+      "item": [
+        {
+          "name": "List Printer",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/printer/list", "host": ["{{baseUrl}}"], "path": ["pos","printer","list"], "query": [{"key":"outletId","value":"1","disabled":true}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "List Printer per Outlet",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/printer/list?outletId=1", "host": ["{{baseUrl}}"], "path": ["pos","printer","list"], "query": [{"key":"outletId","value":"1"}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Detail Printer",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/printer/detail/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Tambah Printer (Kitchen - Network)",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/printer/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"outletId\": 1,\n  \"type\": \"KITCHEN\",\n  \"name\": \"Printer Dapur\",\n  \"connectionType\": \"NETWORK\",\n  \"ipAddress\": \"192.168.1.100\",\n  \"port\": 9100,\n  \"paperSize\": \"80mm\",\n  \"isDefault\": true\n}" } }
+        },
+        {
+          "name": "Tambah Printer (Receipt - Bluetooth)",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/printer/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"outletId\": 1,\n  \"type\": \"RECEIPT\",\n  \"name\": \"Printer Kasir BT\",\n  \"connectionType\": \"BLUETOOTH\",\n  \"ipAddress\": null,\n  \"port\": null,\n  \"paperSize\": \"58mm\",\n  \"isDefault\": true\n}" } }
+        },
+        {
+          "name": "Update Printer",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/printer/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"printerId\": 1,\n  \"outletId\": 1,\n  \"type\": \"KITCHEN\",\n  \"name\": \"Printer Dapur Updated\",\n  \"connectionType\": \"NETWORK\",\n  \"ipAddress\": \"192.168.1.101\",\n  \"port\": 9100,\n  \"paperSize\": \"80mm\",\n  \"isDefault\": true,\n  \"isActive\": true\n}" } }
+        },
+        {
+          "name": "Hapus Printer",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/pos/printer/delete/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        }
+      ]
+    },
+
+    {
+      "name": "Disbursement (Revenue Sharing)",
+      "item": [
+        {
+          "name": "List Rules",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/disbursement/rule/list?activeOnly=false", "host": ["{{baseUrl}}"], "path": ["pos","disbursement","rule","list"], "query": [{"key":"activeOnly","value":"false"}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Detail Rule",
+          "request": { "method": "GET", "url": "{{baseUrl}}/pos/disbursement/rule/detail/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "Tambah Rule (Dealer Fee)",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/disbursement/rule/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Dealer Fee\",\n  \"layer\": \"DEALER\",\n  \"recipientId\": 5,\n  \"recipientName\": \"PT Distributor ABC\",\n  \"percentage\": 2.50,\n  \"source\": \"NET\",\n  \"productTypeFilter\": null,\n  \"displayOrder\": 1\n}" } }
+        },
+        {
+          "name": "Tambah Rule (Platform Fee)",
+          "request": { "method": "POST", "url": "{{baseUrl}}/pos/disbursement/rule/add", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Platform Fee\",\n  \"layer\": \"PLATFORM\",\n  \"recipientId\": null,\n  \"recipientName\": \"Platform\",\n  \"percentage\": 1.00,\n  \"source\": \"NET_AFTER_TAX_SC\",\n  \"productTypeFilter\": null,\n  \"displayOrder\": 0\n}" } }
+        },
+        {
+          "name": "Update Rule",
+          "request": { "method": "PUT", "url": "{{baseUrl}}/pos/disbursement/rule/update", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"ruleId\": 1,\n  \"name\": \"Dealer Fee Updated\",\n  \"layer\": \"DEALER\",\n  \"recipientId\": 5,\n  \"recipientName\": \"PT Distributor ABC\",\n  \"percentage\": 3.00,\n  \"source\": \"NET\",\n  \"productTypeFilter\": null,\n  \"displayOrder\": 1,\n  \"isActive\": true\n}" } }
+        },
+        {
+          "name": "Nonaktifkan Rule",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/pos/disbursement/rule/delete/1", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        },
+        {
+          "name": "List Log Disbursement",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/pos/disbursement/log/list?startDate=2026-01-01&endDate=2026-03-31", "host": ["{{baseUrl}}"], "path": ["pos","disbursement","log","list"], "query": [{"key":"startDate","value":"2026-01-01"},{"key":"endDate","value":"2026-03-31"}] }, "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] }
+        }
+      ]
+    },
+
+    {
+      "name": "Image Upload",
+      "item": [
+        {
+          "name": "Upload Gambar",
+          "request": { "method": "POST", "url": "{{baseUrl}}/images/upload", "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "" }] } }
+        }
+      ]
+    }
+
+  ]
+}

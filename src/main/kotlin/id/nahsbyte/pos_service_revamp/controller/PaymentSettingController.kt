@@ -15,10 +15,28 @@ class PaymentSettingController(
     private val jwtUtil: JwtUtil
 ) {
 
+    /** Default setting (tidak terikat outlet). */
     @GetMapping("/payment-setting")
     fun get(@RequestHeader("Authorization") auth: String): ResponseEntity<ApiResponse<*>> {
         val merchantId = jwtUtil.extractMerchantId(jwtUtil.resolveToken(auth))
         return ResponseEntity.ok(ApiResponse.ok(paymentSettingService.get(merchantId)))
+    }
+
+    /** Semua setting: default + per-outlet overrides. */
+    @GetMapping("/payment-setting/list")
+    fun list(@RequestHeader("Authorization") auth: String): ResponseEntity<ApiResponse<*>> {
+        val merchantId = jwtUtil.extractMerchantId(jwtUtil.resolveToken(auth))
+        return ResponseEntity.ok(ApiResponse.ok(paymentSettingService.list(merchantId)))
+    }
+
+    /** Setting efektif untuk outlet tertentu (fallback ke default jika override tidak ada). */
+    @GetMapping("/payment-setting/outlet/{outletId}")
+    fun getByOutlet(
+        @RequestHeader("Authorization") auth: String,
+        @PathVariable outletId: Long
+    ): ResponseEntity<ApiResponse<*>> {
+        val merchantId = jwtUtil.extractMerchantId(jwtUtil.resolveToken(auth))
+        return ResponseEntity.ok(ApiResponse.ok(paymentSettingService.getByOutlet(merchantId, outletId)))
     }
 
     @PostMapping("/payment-setting/create")

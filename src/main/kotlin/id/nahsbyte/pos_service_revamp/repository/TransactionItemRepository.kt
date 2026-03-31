@@ -11,7 +11,7 @@ interface TransactionItemRepository : JpaRepository<TransactionItem, Long> {
     fun findAllByTransactionId(transactionId: Long): List<TransactionItem>
 
     @Query("""
-        SELECT ti.productName, SUM(ti.qty)
+        SELECT ti.productName, SUM(ti.qty), SUM(ti.totalPrice)
         FROM TransactionItem ti
         WHERE ti.transactionId IN (
             SELECT t.id FROM Transaction t
