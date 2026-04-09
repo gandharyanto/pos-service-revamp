@@ -30,6 +30,7 @@ Dokumen ini menggabungkan isi kedua dokumen sumber ke satu file dan menyusunnya 
 - 18. Laporan Keuangan
 - 19. Upload Gambar
 - 20. Refund
+- 21. Revenue Report
 - Lampiran A: Ringkasan Modul
 - Lampiran B: Kode HTTP Response
 - Lampiran C: Format Response Standar
@@ -4231,6 +4232,290 @@ Refund APPROVED
 
 ---
 
+## 21. Revenue Report
+
+### Business Process
+
+#### Deskripsi
+Modul Revenue Report menghasilkan laporan revenue sharing antara operator area (ASG) dengan merchant. Setiap transaksi dihitung biaya MDR berdasarkan metode pembayaran, revenue sharing bersih berdasarkan T&C per area, PPN atas revenue sharing, dan total tagihan revenue sharing kepada merchant.
+
+#### Aktor
+- **Platform Admin (ASG)** — akses semua data lintas subsidiary group dan area
+- **Area Admin (Dealer)** — akses data area yang dikelola
+- **Merchant Admin** — akses data merchant sendiri (read-only)
+
+#### Hierarki Data
+
+```
+Subsidiary Group  (Amantara / Arkana / ...)
+  └── Area        (PIK Pantjoran / By The Sea / Old Shanghai / ...)
+        └── Merchant  (Kwetiau Aho / Jumbo Beer / Es Kopi / ...)
+              └── Outlet → Transaction → Payment
+```
+
+#### Alur Generate Report
+
+```
+[Admin] --> GET /reports/revenue
+              ?from=YYYY-MM-DD
+              &to=YYYY-MM-DD
+              &subsidiaryGroup=  (opsional)
+              &area=             (opsional)
+              &merchantId=       (opsional)
+              &paymentType=      (opsional)
+              &page=&size=
+              |
+        [QUERY] Transaction JOIN Payment
+                  filter: tanggal, status = PAID
+                  group by: subsidiaryGroup, area, merchant,
+                            date, paymentType, issuerType
+              |
+        [HITUNG per baris]
+          MDR Amount           = transactionAmount × mdrRate(paymentType)
+          Sharing MDR Amount   = MDR Amount × sharingMdrRate(area)
+          Net Revenue Sharing  = transactionAmount × revenueShareRate(area)
+          VAT Revenue Sharing  = Net Revenue Sharing × 11%
+          Total Revenue Sharing = Net Revenue Sharing + VAT Revenue Sharing
+              |
+        Response: { data: [...], summary: {...}, pagination: {...} }
+
+[Admin] --> GET /reports/revenue/export?format=xlsx
+              → Download file Excel / CSV
+```
+
+#### 21.1 Field Data Report
+
+| No | Field | Tipe | Deskripsi | Sumber |
+|----|-------|------|-----------|--------|
+| 1 | `subsidiaryGroup` | Text | Grup subsidiasi area (Amantara / Arkana) | Konfigurasi Merchant |
+| 2 | `area` | Text | Nama area lokasi (PIK Pantjoran, By The Sea, dll.) | Konfigurasi Outlet/Area |
+| 3 | `merchantName` | Text | Nama merchant (Kwetiau Aho, Jumbo Beer, dll.) | Merchant |
+| 4 | `transactionDate` | DateTime | Tanggal, bulan, tahun, jam transaksi | Transaction |
+| 5 | `transactionAmount` | Amount (IDR) | Nilai total transaksi (Total Final) | Payment |
+| 6 | `paymentType` | Text | Metode pembayaran (QRIS, Debit Card, Credit Card, dll.) | Payment |
+| 7 | `issuerType` | Text | Issuer/bank (BCA, Mandiri, BNI, dll.) | Payment |
+| 8 | `mdrAmount` | Amount (IDR) | Total biaya MDR = `amount × totalMdrRate` (ditanggung merchant) | Kalkulasi |
+| 9 | `sharingMdrAmount` | Amount (IDR) | Bagian MDR yang masuk ke CZ = `mdrAmount − acqMdrAmount` | Kalkulasi |
+| 10 | `netRevenueSharing` | Amount (IDR) | Revenue sharing bersih = `amount × revenueShareRate` | Kalkulasi |
+| 11 | `vatRevenueSharing` | Amount (IDR) | PPN 11% dari `netRevenueSharing` | Kalkulasi |
+| 12 | `totalRevenueSharing` | Amount (IDR) | `netRevenueSharing + vatRevenueSharing` | Kalkulasi |
+
+> Field breakdown MDR per layer (`acqMdrAmount`, `aggMdrAmount`, `agtMdrAmount`, `dealerMdrAmount`) tersedia di export Excel sebagai kolom tambahan, tidak ditampilkan di list default.
+
+#### 21.2 Konfigurasi Rate
+
+Dua tabel konfigurasi digunakan secara terpisah:
+
+**MdrRateConfig** — dikonfigurasi per **area × paymentType**
+
+| Field | Tipe | Deskripsi |
+|-------|------|-----------|
+| `areaId` | Long | Referensi ke entitas Area |
+| `paymentType` | Enum | QRIS / DEBIT_CARD / CREDIT_CARD / CASH / dll. |
+| `totalMdrRate` | Decimal (%) | Total MDR yang dibebankan ke merchant — contoh QRIS: `0.700` |
+| `acqMdrRate` | Decimal (%) | Bagian MDR ke acquirer/payment network — contoh: `0.385` |
+| `aggMdrRate` | Decimal (%) | Bagian MDR ke layer Agregator — `0` jika tidak ada |
+| `agtMdrRate` | Decimal (%) | Bagian MDR ke layer Agent — `0` jika tidak ada |
+| `dealerMdrRate` | Decimal (%) | Bagian MDR ke layer Dealer — contoh: `0.315` |
+
+> **Constraint:** `acqMdrRate + aggMdrRate + agtMdrRate + dealerMdrRate` harus **= totalMdrRate**. Sistem menolak simpan jika tidak sesuai.
+
+**AreaRevenueConfig** — dikonfigurasi per **area**
+
+| Field | Tipe | Deskripsi |
+|-------|------|-----------|
+| `areaId` | Long | Referensi ke entitas Area |
+| `revenueShareRate` | Decimal (%) | Rate revenue sharing T&C per area — contoh: `20` |
+
+> PPN 11% bersifat tetap (tidak dikonfigurasi).
+
+#### Validasi Parameter
+
+| # | Parameter | Aturan | Error |
+|---|-----------|--------|-------|
+| 1 | `from` & `to` | Wajib; `from` tidak boleh lebih besar dari `to` | 400 Bad Request |
+| 2 | Rentang tanggal | Maksimum 92 hari (3 bulan) per request | 400 Bad Request |
+| 3 | `merchantId` | Jika diisi harus valid dan dalam scope caller | 403 / 404 |
+| 4 | `paymentType` | Jika diisi harus nilai enum yang dikenal | 400 Bad Request |
+| 5 | Export | Hanya format `xlsx` dan `csv` yang didukung | 400 Bad Request |
+| 6 | MdrRateConfig | `acqMdrRate + aggMdrRate + agtMdrRate + dealerMdrRate ≠ totalMdrRate` | 400 Bad Request |
+
+### Pola Konfigurasi Revenue Report
+
+#### Pola 1 — MDR Split per Layer (semua layer aktif)
+
+Total MDR 0.7% dibagi ke 4 komponen; jumlah harus tepat sama dengan `totalMdrRate`.
+
+```
+Amount           : Rp 1.000.000
+Payment Type     : QRIS
+Total MDR (0.700%): Rp 7.000
+  ├─ AcqMDR    0.385%  → Rp 3.850   (ke acquirer / payment network)
+  ├─ AggMDR    0.100%  → Rp 1.000   (ke Agregator)
+  ├─ AGTMDR    0.100%  → Rp 1.000   (ke Agent)
+  └─ DealerMDR 0.115%  → Rp 1.150   (ke Dealer)
+                ──────────────────────
+  Cek: 0.385 + 0.100 + 0.100 + 0.115 = 0.700 ✓
+
+  sharingMdrAmount = mdrAmount − acqMdrAmount
+                   = Rp 7.000 − Rp 3.850 = Rp 3.150
+```
+
+#### Pola 2 — MDR Split: Layer Agg & AGT tidak ada
+
+Jika area tidak memiliki layer Agregator dan Agent, rate-nya 0 dan seluruh sisa CZ MDR ke Dealer.
+
+```
+Amount           : Rp 1.000.000
+Payment Type     : QRIS
+Total MDR (0.700%): Rp 7.000
+  ├─ AcqMDR    0.385%  → Rp 3.850
+  ├─ AggMDR    0.000%  → Rp     0   (tidak ada)
+  ├─ AGTMDR    0.000%  → Rp     0   (tidak ada)
+  └─ DealerMDR 0.315%  → Rp 3.150
+                ──────────────────────
+  Cek: 0.385 + 0 + 0 + 0.315 = 0.700 ✓
+
+  sharingMdrAmount = Rp 7.000 − Rp 3.850 = Rp 3.150
+```
+
+#### Pola 3 — Revenue Sharing per Area (T&C)
+
+`revenueShareRate` dikonfigurasi per area. PPN 11% selalu dihitung dari `netRevenueSharing`.
+
+```
+Amount              : Rp 1.000.000
+revenueShareRate    : 20%   ← T&C area PIK Pantjoran
+─────────────────────────────────────────────────────
+netRevenueSharing   = Rp 1.000.000 × 20%   = Rp 200.000
+vatRevenueSharing   = Rp   200.000 × 11%   = Rp  22.000
+totalRevenueSharing = Rp 200.000 + Rp 22.000 = Rp 222.000
+```
+
+#### Pola 4 — Skenario Lengkap Satu Transaksi (QRIS, tanpa Agg & AGT)
+
+```
+Merchant       : Kwetiau Aho (Area: PIK Pantjoran, Subsidiary: Amantara)
+Tanggal        : 2026-04-09 12:35
+Amount         : Rp 1.000.000
+Payment Type   : QRIS
+Issuer         : DANA
+
+MdrRateConfig (Area: PIK Pantjoran × QRIS):
+  totalMdrRate  : 0.700%
+  acqMdrRate    : 0.385%
+  aggMdrRate    : 0.000%
+  agtMdrRate    : 0.000%
+  dealerMdrRate : 0.315%
+
+AreaRevenueConfig (Area: PIK Pantjoran):
+  revenueShareRate: 20%
+
+Kalkulasi:
+  mdrAmount         = Rp 1.000.000 × 0.700%  = Rp   7.000
+  acqMdrAmount      = Rp 1.000.000 × 0.385%  = Rp   3.850
+  aggMdrAmount      = Rp 1.000.000 × 0.000%  = Rp       0
+  agtMdrAmount      = Rp 1.000.000 × 0.000%  = Rp       0
+  dealerMdrAmount   = Rp 1.000.000 × 0.315%  = Rp   3.150
+  sharingMdrAmount  = Rp 7.000 − Rp 3.850    = Rp   3.150
+  ─────────────────────────────────────────────────────────
+  netRevenueSharing = Rp 1.000.000 × 20%     = Rp 200.000
+  vatRevenueSharing = Rp   200.000 × 11%     = Rp  22.000
+  totalRevenueSharing                         = Rp 222.000
+```
+
+#### Pola 5 — Validasi Konsistensi Rate MDR
+
+Sistem menolak simpan konfigurasi jika total pecahan tidak sama persis dengan `totalMdrRate`:
+
+```
+✓  0.385 + 0.000 + 0.000 + 0.315 = 0.700  → valid
+✓  0.385 + 0.100 + 0.100 + 0.115 = 0.700  → valid
+✗  0.385 + 0.100 + 0.100 + 0.100 = 0.685  → 400: "MDR rate tidak seimbang"
+✗  0.385 + 0.200 + 0.100 + 0.115 = 0.800  → 400: "MDR rate tidak seimbang"
+```
+
+#### Pola 6 — Rekap Summary per Area
+
+Response API menyertakan blok `summary` berisi agregasi seluruh baris dalam filter:
+
+```json
+{
+  "summary": {
+    "transactionCount": 250,
+    "totalTransactionAmount": 250000000,
+    "totalMdrAmount": 1750000,
+    "totalAcqMdrAmount": 962500,
+    "totalSharingMdrAmount": 787500,
+    "totalNetRevenueSharing": 50000000,
+    "totalVatRevenueSharing": 5500000,
+    "totalRevenueSharing": 55000000
+  }
+}
+```
+
+---
+
+### UI Mockup
+
+**21. Revenue Report**
+
+#### 21.1 Halaman Filter & List Report
+
+```
++──────────────────────────────────────────────────────────────────────+
+│  Revenue Report                                  [ Export Excel ]   │
+│  Dashboard > Laporan > Revenue                                       │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Dari: [ 01/04/2026 ]  s/d: [ 09/04/2026 ]                         │
+│  Subsidiary Group: [v Semua ..................... v]                  │
+│  Area:             [v Semua ..................... v]                  │
+│  Merchant:         [v Semua ..................... v]                  │
+│  Payment Type:     [v Semua ..................... v]                  │
+│                                           [ Terapkan Filter ]        │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌────────────┐  │
+│  │ Total Trx    │ │ Total Trx Amt│ │ Total Net RS │ │ Total RS   │  │
+│  │     250      │ │ Rp 125.000K  │ │ Rp   3.750K  │ │ Rp  4.163K │  │
+│  └──────────────┘ └──────────────┘ └──────────────┘ └────────────┘  │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│ Sub.Group │Area     │Merchant    │Tgl      │Trx Amt    │Pay Type│MDR Amt│Share MDR│Net RS  │VAT RS │Total RS │
+│───────────┼─────────┼────────────┼─────────┼───────────┼────────┼───────┼─────────┼────────┼───────┼─────────│
+│ Amantara  │PIK P.   │Kwetiau Aho │09/04/26 │1.000.000  │QRIS    │ 7.000 │  3.150  │200.000 │22.000 │ 222.000 │
+│ Amantara  │PIK P.   │Kwetiau Aho │09/04/26 │  500.000  │Debit   │ 5.000 │  2.575  │100.000 │11.000 │ 111.000 │
+│ Arkana    │By The Sea│Jumbo Beer │09/04/26 │2.000.000  │Credit  │30.000 │ 15.450  │400.000 │44.000 │ 444.000 │
+│ ...       │...      │...         │...      │...     │...     │...    │...   │...   │...     │
+├──────────────────────────────────────────────────────────────────────┤
+│  [ < Prev ]  Halaman 1 dari 10  [ Next > ]                          │
++──────────────────────────────────────────────────────────────────────+
+```
+
+#### 21.2 Export Excel
+
+File Excel yang dihasilkan mengandung:
+- Sheet **Detail** — semua baris sesuai filter, 12 kolom utama + 4 kolom breakdown MDR (`acqMdrAmount`, `aggMdrAmount`, `agtMdrAmount`, `dealerMdrAmount`)
+- Sheet **Summary per Merchant** — agregasi per merchant: total transaksi, total MDR, total revenue sharing
+- Sheet **Summary per Area** — agregasi per area
+- Header baris pertama berisi label kolom; baris berikutnya adalah data; format tanggal `DD/MM/YYYY HH:mm`; format angka IDR tanpa simbol Rp (agar bisa diolah pivot)
+
+```
++──────────────────────────────────────────────────────────────────────+
+│  Export Revenue Report                                               │
+│  ─────────────────────────────────────────────────────────────────  │
+│  Periode  : 01/04/2026 – 09/04/2026                                 │
+│  Format   : (•) Excel (.xlsx)   ( ) CSV (.csv)                      │
+│  Grouping : [✓] Sertakan Sheet Summary per Merchant                 │
+│             [✓] Sertakan Sheet Summary per Area                     │
+│                                                                      │
+│                    [ Cancel ]  [ Download ]                          │
++──────────────────────────────────────────────────────────────────────+
+```
+
+---
+
 ## Lampiran A: Ringkasan Modul
 
 | No | Modul | Entitas Utama | Operasi Inti | Ketergantungan |
@@ -4255,6 +4540,7 @@ Refund APPROVED
 | 18 | Laporan | settlement_report_log | Read-only Aggregation, Settlement Report Email (Cron/Manual) | Transaction, Payment, DisbursementLog, Service Rendy (Email) |
 | 19 | Upload Gambar | Images | Upload | Product, Category |
 | 20 | Refund | Refund, RefundItem | Create, OTP Generate, Approve | Transaction, Stock, Loyalty, Disbursement, Service Rendy (Email) |
+| 21 | Revenue Report | RevenueReportConfig, Payment, Transaction | Read-only Aggregation, Export Excel/CSV | Transaction, Payment, Merchant, Area |
 
 ---
 
