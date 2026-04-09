@@ -4237,7 +4237,7 @@ Refund APPROVED
 ### Business Process
 
 #### Deskripsi
-Modul Revenue Report menghasilkan laporan revenue sharing antara operator area (ASG) dengan merchant. Setiap transaksi dihitung biaya MDR berdasarkan metode pembayaran, revenue sharing bersih berdasarkan T&C per area, PPN atas revenue sharing, dan total tagihan revenue sharing kepada merchant.
+Modul Revenue Report menghasilkan laporan revenue sharing antara operator area (ASG) dengan merchant. Setiap transaksi dihitung potongan PB1 (Pajak Pembangunan 1, 10%), revenue sharing bersih berdasarkan T&C per area dihitung dari DPP (harga setelah dikurangi PB1), PPN 11% atas revenue sharing, dan total tagihan Dealer Fee kepada merchant.
 
 #### Aktor
 - **Platform Admin (ASG)** — akses semua data lintas subsidiary group dan area
@@ -4271,11 +4271,11 @@ Subsidiary Group  (Amantara / Arkana / ...)
                             date, paymentType, issuerType
               |
         [HITUNG per baris]
-          MDR Amount           = transactionAmount × mdrRate(paymentType)
-          Sharing MDR Amount   = MDR Amount × sharingMdrRate(area)
-          Net Revenue Sharing  = transactionAmount × revenueShareRate(area)
-          VAT Revenue Sharing  = Net Revenue Sharing × 11%
-          Total Revenue Sharing = Net Revenue Sharing + VAT Revenue Sharing
+          PB1 (Tax Deduction)  = transactionAmount ÷ 11  (jika isPb1 = true, else 0)
+          DPP                  = transactionAmount − PB1
+          Net Revenue Sharing  = DPP × revenueShareRate(area)
+          VAT Revenue Sharing  = Net Revenue Sharing × 11%   (PPN atas jasa ASG)
+          Dealer Fee           = Net Revenue Sharing + VAT Revenue Sharing
               |
         Response: { data: [...], summary: {...}, pagination: {...} }
 
@@ -4294,13 +4294,13 @@ Subsidiary Group  (Amantara / Arkana / ...)
 | 5 | `transactionAmount` | Amount (IDR) | Nilai total transaksi (Total Final) | Payment |
 | 6 | `paymentType` | Text | Metode pembayaran (QRIS, Debit Card, Credit Card, dll.) | Payment |
 | 7 | `issuerType` | Text | Issuer/bank (BCA, Mandiri, BNI, dll.) | Payment |
-| 8 | `mdrAmount` | Amount (IDR) | Total biaya MDR = `amount × totalMdrRate` (ditanggung merchant) | Kalkulasi |
-| 9 | `sharingMdrAmount` | Amount (IDR) | Bagian MDR yang masuk ke CZ = `mdrAmount − acqMdrAmount` | Kalkulasi |
-| 10 | `netRevenueSharing` | Amount (IDR) | Revenue sharing bersih = `amount × revenueShareRate` | Kalkulasi |
-| 11 | `vatRevenueSharing` | Amount (IDR) | PPN 11% dari `netRevenueSharing` | Kalkulasi |
-| 12 | `totalRevenueSharing` | Amount (IDR) | `netRevenueSharing + vatRevenueSharing` | Kalkulasi |
+| 8 | `totalTaxDeduction` | Amount (IDR) | PB1 10% include-tax = `amount ÷ 11`; bernilai 0 jika merchant tidak kena PB1 | Kalkulasi |
+| 9 | `dpp` | Amount (IDR) | Dasar Pengenaan Pajak = `amount − totalTaxDeduction` | Kalkulasi |
+| 10 | `netRevenueSharing` | Amount (IDR) | Revenue sharing bersih = `dpp × revenueShareRate` | Kalkulasi |
+| 11 | `vatRevenueSharing` | Amount (IDR) | PPN 11% atas jasa ASG = `netRevenueSharing × 11%` | Kalkulasi |
+| 12 | `totalRevenueSharing` | Amount (IDR) | Dealer Fee = `netRevenueSharing + vatRevenueSharing` | Kalkulasi |
 
-> Field breakdown MDR per layer (`acqMdrAmount`, `aggMdrAmount`, `agtMdrAmount`, `dealerMdrAmount`) tersedia di export Excel sebagai kolom tambahan, tidak ditampilkan di list default.
+> **Catatan:** `totalTaxDeduction` adalah PB1 (Pajak Pembangunan 1) — pajak daerah 10% untuk F&B/restoran/hiburan yang sudah termasuk dalam harga transaksi. Berbeda dengan PPN produk. Merchant non-PKP atau jenis usaha non-PB1 akan memiliki nilai 0.
 
 #### 21.2 Konfigurasi Rate
 
@@ -4326,8 +4326,9 @@ Dua tabel konfigurasi digunakan secara terpisah:
 |-------|------|-----------|
 | `areaId` | Long | Referensi ke entitas Area |
 | `revenueShareRate` | Decimal (%) | Rate revenue sharing T&C per area — contoh: `20` |
+| `isPb1` | Boolean | `true` jika merchant di area ini dikenakan PB1 10%; `false` jika tidak |
 
-> PPN 11% bersifat tetap (tidak dikonfigurasi).
+> PB1 (Pajak Pembangunan 1) = pajak daerah 10% untuk F&B/restoran/hiburan, include dalam harga transaksi. PPN 11% atas jasa ASG bersifat tetap (tidak dikonfigurasi).
 
 #### Validasi Parameter
 
@@ -4342,91 +4343,106 @@ Dua tabel konfigurasi digunakan secara terpisah:
 
 ### Pola Konfigurasi Revenue Report
 
-#### Pola 1 — MDR Split per Layer (semua layer aktif)
+#### Pola 1 — Ekstraksi PB1 (isPb1 = true)
 
-Total MDR 0.7% dibagi ke 4 komponen; jumlah harus tepat sama dengan `totalMdrRate`.
-
-```
-Amount           : Rp 1.000.000
-Payment Type     : QRIS
-Total MDR (0.700%): Rp 7.000
-  ├─ AcqMDR    0.385%  → Rp 3.850   (ke acquirer / payment network)
-  ├─ AggMDR    0.100%  → Rp 1.000   (ke Agregator)
-  ├─ AGTMDR    0.100%  → Rp 1.000   (ke Agent)
-  └─ DealerMDR 0.115%  → Rp 1.150   (ke Dealer)
-                ──────────────────────
-  Cek: 0.385 + 0.100 + 0.100 + 0.115 = 0.700 ✓
-
-  sharingMdrAmount = mdrAmount − acqMdrAmount
-                   = Rp 7.000 − Rp 3.850 = Rp 3.150
-```
-
-#### Pola 2 — MDR Split: Layer Agg & AGT tidak ada
-
-Jika area tidak memiliki layer Agregator dan Agent, rate-nya 0 dan seluruh sisa CZ MDR ke Dealer.
+PB1 (Pajak Pembangunan 1) 10% sudah termasuk dalam harga transaksi. Diekstrak dengan formula `Amount ÷ 11`.
 
 ```
-Amount           : Rp 1.000.000
-Payment Type     : QRIS
-Total MDR (0.700%): Rp 7.000
-  ├─ AcqMDR    0.385%  → Rp 3.850
-  ├─ AggMDR    0.000%  → Rp     0   (tidak ada)
-  ├─ AGTMDR    0.000%  → Rp     0   (tidak ada)
-  └─ DealerMDR 0.315%  → Rp 3.150
-                ──────────────────────
-  Cek: 0.385 + 0 + 0 + 0.315 = 0.700 ✓
+Mengapa ÷ 11?
+  Amount = DPP + PB1 = DPP + (DPP × 10%) = DPP × 1.10
+  PB1    = Amount ÷ 11  →  DPP × 1.10 ÷ 11 = DPP × 10% ✓
 
-  sharingMdrAmount = Rp 7.000 − Rp 3.850 = Rp 3.150
+Contoh:
+  Amount                : Rp 1.597.000
+  totalTaxDeduction PB1 : Rp   145.182   (1.597.000 ÷ 11 = 145.181,8 → dibulatkan)
+  DPP                   : Rp 1.451.818   (1.597.000 − 145.182)
 ```
 
-#### Pola 3 — Revenue Sharing per Area (T&C)
+#### Pola 2 — Tanpa PB1 (isPb1 = false)
 
-`revenueShareRate` dikonfigurasi per area. PPN 11% selalu dihitung dari `netRevenueSharing`.
+Merchant non-F&B, non-PKP, atau jenis usaha yang tidak dikenakan PB1.
 
 ```
-Amount              : Rp 1.000.000
-revenueShareRate    : 20%   ← T&C area PIK Pantjoran
-─────────────────────────────────────────────────────
-netRevenueSharing   = Rp 1.000.000 × 20%   = Rp 200.000
-vatRevenueSharing   = Rp   200.000 × 11%   = Rp  22.000
-totalRevenueSharing = Rp 200.000 + Rp 22.000 = Rp 222.000
+  Amount                : Rp   370.000
+  totalTaxDeduction PB1 : Rp         0   (isPb1 = false)
+  DPP                   : Rp   370.000   (= Amount)
 ```
 
-#### Pola 4 — Skenario Lengkap Satu Transaksi (QRIS, tanpa Agg & AGT)
+#### Pola 3 — Revenue Sharing dari DPP
+
+`revenueShareRate` dikonfigurasi per area (T&C). Basis selalu DPP, bukan Amount gross.
+
+```
+  DPP                 : Rp 1.451.818
+  revenueShareRate    : 20%   ← T&C area PIK Pantjoran
+  ──────────────────────────────────────────────────────
+  netRevenueSharing   = 1.451.818 × 20%  = Rp   290.364
+  vatRevenueSharing   = 290.364 × 11%    = Rp    31.940
+  Dealer Fee          = 290.364 + 31.940 = Rp   322.304
+```
+
+#### Pola 4 — Skenario Lengkap: Merchant dengan PB1 (Rp 1.597.000)
 
 ```
 Merchant       : Kwetiau Aho (Area: PIK Pantjoran, Subsidiary: Amantara)
 Tanggal        : 2026-04-09 12:35
-Amount         : Rp 1.000.000
-Payment Type   : QRIS
-Issuer         : DANA
+Amount         : Rp 1.597.000
 
-MdrRateConfig (Area: PIK Pantjoran × QRIS):
+AreaRevenueConfig (PIK Pantjoran):
+  isPb1            : true
+  revenueShareRate : 20%
+
+Kalkulasi:
+  totalTaxDeduction = 1.597.000 ÷ 11         = Rp   145.182
+  dpp               = 1.597.000 − 145.182     = Rp 1.451.818
+  netRevenueSharing = 1.451.818 × 20%         = Rp   290.364
+  vatRevenueSharing = 290.364 × 11%           = Rp    31.940
+  Dealer Fee        = 290.364 + 31.940        = Rp   322.304
+```
+
+#### Pola 5 — Skenario Lengkap: Merchant tanpa PB1 (Rp 370.000)
+
+```
+Merchant       : Es Kopi (Area: PIK Pantjoran, Subsidiary: Amantara)
+Amount         : Rp 370.000
+
+AreaRevenueConfig (PIK Pantjoran):
+  isPb1            : false
+  revenueShareRate : 20%
+
+Kalkulasi:
+  totalTaxDeduction = 0                      = Rp         0
+  dpp               = 370.000 − 0            = Rp   370.000
+  netRevenueSharing = 370.000 × 20%          = Rp    74.000
+  vatRevenueSharing = 74.000 × 11%           = Rp     8.140
+  Dealer Fee        = 74.000 + 8.140         = Rp    82.140
+```
+
+#### Pola 6 — MDR Split per Layer
+
+MDR dihitung terpisah dari Revenue Sharing dan tidak mempengaruhi base DPP.
+
+```
+Amount           : Rp 1.597.000
+Payment Type     : QRIS
+
+MdrRateConfig (PIK Pantjoran × QRIS):
   totalMdrRate  : 0.700%
   acqMdrRate    : 0.385%
   aggMdrRate    : 0.000%
   agtMdrRate    : 0.000%
   dealerMdrRate : 0.315%
 
-AreaRevenueConfig (Area: PIK Pantjoran):
-  revenueShareRate: 20%
-
-Kalkulasi:
-  mdrAmount         = Rp 1.000.000 × 0.700%  = Rp   7.000
-  acqMdrAmount      = Rp 1.000.000 × 0.385%  = Rp   3.850
-  aggMdrAmount      = Rp 1.000.000 × 0.000%  = Rp       0
-  agtMdrAmount      = Rp 1.000.000 × 0.000%  = Rp       0
-  dealerMdrAmount   = Rp 1.000.000 × 0.315%  = Rp   3.150
-  sharingMdrAmount  = Rp 7.000 − Rp 3.850    = Rp   3.150
-  ─────────────────────────────────────────────────────────
-  netRevenueSharing = Rp 1.000.000 × 20%     = Rp 200.000
-  vatRevenueSharing = Rp   200.000 × 11%     = Rp  22.000
-  totalRevenueSharing                         = Rp 222.000
+  mdrAmount         = 1.597.000 × 0.700%  = Rp  11.179
+  acqMdrAmount      = 1.597.000 × 0.385%  = Rp   6.148
+  aggMdrAmount      = 0
+  agtMdrAmount      = 0
+  dealerMdrAmount   = 1.597.000 × 0.315%  = Rp   5.031
+  sharingMdrAmount  = 11.179 − 6.148      = Rp   5.031
+  Cek: 0.385 + 0 + 0 + 0.315 = 0.700 ✓
 ```
 
-#### Pola 5 — Validasi Konsistensi Rate MDR
-
-Sistem menolak simpan konfigurasi jika total pecahan tidak sama persis dengan `totalMdrRate`:
+#### Pola 7 — Validasi Konsistensi Rate MDR
 
 ```
 ✓  0.385 + 0.000 + 0.000 + 0.315 = 0.700  → valid
@@ -4435,21 +4451,20 @@ Sistem menolak simpan konfigurasi jika total pecahan tidak sama persis dengan `t
 ✗  0.385 + 0.200 + 0.100 + 0.115 = 0.800  → 400: "MDR rate tidak seimbang"
 ```
 
-#### Pola 6 — Rekap Summary per Area
-
-Response API menyertakan blok `summary` berisi agregasi seluruh baris dalam filter:
+#### Pola 8 — Rekap Summary per Area
 
 ```json
 {
   "summary": {
     "transactionCount": 250,
     "totalTransactionAmount": 250000000,
+    "totalTaxDeduction": 22727273,
+    "totalDpp": 227272727,
     "totalMdrAmount": 1750000,
-    "totalAcqMdrAmount": 962500,
     "totalSharingMdrAmount": 787500,
-    "totalNetRevenueSharing": 50000000,
-    "totalVatRevenueSharing": 5500000,
-    "totalRevenueSharing": 55000000
+    "totalNetRevenueSharing": 45454545,
+    "totalVatRevenueSharing": 5000000,
+    "totalDealerFee": 50454545
   }
 }
 ```
