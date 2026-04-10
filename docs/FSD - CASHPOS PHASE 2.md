@@ -322,40 +322,52 @@ Produk tunggal tanpa varian maupun add-on. Stok dan harga dikelola langsung di l
 
 #### 2.3 Alur Pengelolaan Produk — VARIANT
 
-Produk yang memiliki variasi berbeda-beda (ukuran, warna, suhu, dll). Setiap kombinasi varian dianggap sebagai SKU yang berbeda dengan harga dan stok masing-masing.
+Produk yang memiliki variasi berbeda-beda (ukuran, warna, suhu, dll). Setiap opsi varian dapat memiliki `additionalPrice` (boleh 0). Stok dikelola per varian. Produk VARIANT **dapat juga memiliki modifier groups** sebagai add-on di atas varian yang dipilih.
 
 **Struktur tabel:**
 ```
 product (productType=VARIANT)
-  └── product_variant_group   ← kelompok varian, mis: "Ukuran", "Suhu"
-        └── product_variant   ← pilihan dalam kelompok, mis: Small, Medium, Large
+  ├── product_variant_group   ← kelompok varian, mis: "Suhu", "Ukuran"
+  │     └── product_variant   ← pilihan dalam kelompok, mis: Hot, Ice / S, M, L
+  └── product_modifier_group  ← (opsional) add-on di atas varian
+        └── product_modifier  ← pilihan add-on, mis: Extra Shot, Oat Milk
 ```
 
 **Aturan bisnis:**
 - Kasir **wajib memilih satu pilihan** dari setiap variant group yang `isRequired=true`.
-- Harga final item = `product.price` + `variant.additionalPrice`.
+- `variant.additionalPrice` boleh 0 (contoh: Hot = +Rp 0, Ice = +Rp 0).
+- Kasir memilih modifier sesuai `minSelect`/`maxSelect` per group (opsional atau wajib).
+- `modifier.additionalPrice` boleh 0 (contoh: "No Sugar" = +Rp 0).
+- Harga final = `product.price + variant.additionalPrice + sum(modifier.additionalPrice)`.
 - Setiap varian dapat memiliki `sku` tersendiri.
-- Stok dikelola **per varian**, bukan per produk induk.
+- Stok dikelola **per varian** — modifier tidak memiliki stok tersendiri.
 
 ```
 [Admin] --> Buat Produk VARIANT (POST /pos/product/add)
               |
         Simpan Product (productType=VARIANT)
-        (product.price = harga dasar sebelum additional_price varian)
-        (stok awal product induk = 0, tidak digunakan)
+        (product.price = harga dasar; stok produk induk tidak digunakan)
               |
 [Admin] --> Tambah Variant Group (POST /pos/product/{id}/variant-group/add)
         mis: { name: "Ukuran", isRequired: true }
               |
 [Admin] --> Tambah Variant Option (POST /pos/product/{id}/variant/add)
-        mis: { variantGroupId, name: "Small",  additionalPrice: 0,     sku: "KOPI-S" }
-             { variantGroupId, name: "Medium", additionalPrice: 5000,  sku: "KOPI-M" }
-             { variantGroupId, name: "Large",  additionalPrice: 10000, sku: "KOPI-L" }
+        mis: { variantGroupId, name: "Small",  additionalPrice: 0,      sku: "KOPI-S" }
+             { variantGroupId, name: "Medium", additionalPrice: 5.000,  sku: "KOPI-M" }
+             { variantGroupId, name: "Large",  additionalPrice: 10.000, sku: "KOPI-L" }
               |
         Untuk setiap variant: buat Stock record (productId + variantId)
         Buat StockMovement type=SET per variant
               |
-        Produk + varian aktif dan tersedia di POS
+[Admin] --> (Opsional) Tambah Modifier Group (POST /pos/product/{id}/modifier-group/add)
+        mis: { name: "Topping", isRequired: false, minSelect: 0, maxSelect: 3 }
+              |
+[Admin] --> (Opsional) Tambah Modifier Option (POST /pos/product/{id}/modifier/add)
+        mis: { modifierGroupId, name: "Extra Shot", additionalPrice: 5.000 }
+             { modifierGroupId, name: "Oat Milk",   additionalPrice: 8.000 }
+             { modifierGroupId, name: "No Sugar",   additionalPrice: 0     }
+              |
+        Produk + varian (+ modifier opsional) aktif dan tersedia di POS
 ```
 
 **Alur saat transaksi:**
@@ -364,10 +376,13 @@ Kasir memilih produk VARIANT di POS
   |
 Kasir wajib memilih satu opsi dari setiap required variant group
   |
-Harga dihitung: product.price + variant.additionalPrice
+Kasir memilih modifier (jika ada modifier group) sesuai minSelect/maxSelect
   |
-TransactionItem disimpan dengan: productId + variantId
-Stok dikurangi dari Stock record yang sesuai (productId + variantId)
+Harga = product.price + variant.additionalPrice + sum(modifier.additionalPrice)
+  |
+TransactionItem  : productId + variantId
+TransactionModifier: per modifier yang dipilih (transactionItemId + modifierId)
+Stok dikurangi dari Stock record (productId + variantId)
 ```
 
 #### Validasi Variant Group & Variant
@@ -377,7 +392,7 @@ Stok dikurangi dari Stock record yang sesuai (productId + variantId)
 | 1 | `name` (group) | Wajib diisi | 400 Bad Request |
 | 2 | `isRequired` | Wajib diisi (boolean) | 400 Bad Request |
 | 3 | `name` (variant) | Wajib diisi | 400 Bad Request |
-| 4 | `additionalPrice` | Wajib; harus >= 0 | 400 Bad Request |
+| 4 | `additionalPrice` | Wajib; harus >= 0 (boleh 0) | 400 Bad Request |
 | 5 | `sku` (variant) | Opsional; jika diisi harus unik per merchant | 409 Conflict |
 | 6 | `variantGroupId` | Harus valid dan milik produk yang sama | 404 Not Found |
 | 7 | Hapus variant group | Tidak dapat dihapus jika masih ada variant aktif di dalamnya | 400 Bad Request |
@@ -385,20 +400,21 @@ Stok dikurangi dari Stock record yang sesuai (productId + variantId)
 
 #### 2.4 Alur Pengelolaan Produk — MODIFIER
 
-Produk yang memiliki pilihan add-on/topping opsional atau wajib. Modifier tidak mengubah identitas produk, melainkan menambah harga dan detail pesanan.
+Produk yang hanya memiliki pilihan add-on/topping opsional atau wajib tanpa varian. Stok dikelola di level produk.
 
 **Struktur tabel:**
 ```
 product (productType=MODIFIER)
-  └── product_modifier_group   ← kelompok add-on, mis: "Topping", "Extra"
+  └── product_modifier_group   ← kelompok add-on, mis: "Topping", "Level Gula"
         └── product_modifier   ← pilihan dalam kelompok, mis: Extra Shot, Oat Milk
 ```
 
 **Aturan bisnis:**
-- Kasir dapat memilih **lebih dari satu pilihan** dalam satu modifier group (diatur oleh `minSelect` dan `maxSelect`).
-- Jika `isRequired=true` dan `minSelect > 0`, kasir wajib memilih minimal sejumlah `minSelect` item dari group tersebut.
-- Harga final item = `product.price` + jumlah `modifier.additionalPrice` dari semua modifier yang dipilih.
-- Modifier **tidak memiliki stok tersendiri** — pengurangan stok tidak dilakukan per modifier.
+- Kasir dapat memilih beberapa pilihan dalam satu modifier group (diatur `minSelect`/`maxSelect`).
+- Jika `isRequired=true` dan `minSelect > 0`, kasir wajib memilih minimal `minSelect` item.
+- `modifier.additionalPrice` boleh 0 (contoh: "Normal Sugar" = +Rp 0, "Less Sugar" = +Rp 0).
+- Harga final = `product.price + sum(modifier.additionalPrice)`.
+- Modifier **tidak memiliki stok tersendiri** — stok dipotong dari produk utama.
 
 ```
 [Admin] --> Buat Produk MODIFIER (POST /pos/product/add)
@@ -407,12 +423,14 @@ product (productType=MODIFIER)
         Buat StockMovement type=SET (stok awal produk utama)
               |
 [Admin] --> Tambah Modifier Group (POST /pos/product/{id}/modifier-group/add)
-        mis: { name: "Topping", isRequired: false, minSelect: 0, maxSelect: 3 }
+        mis: { name: "Level Gula", isRequired: true,  minSelect: 1, maxSelect: 1 }
+             { name: "Topping",    isRequired: false, minSelect: 0, maxSelect: 3 }
               |
 [Admin] --> Tambah Modifier Option (POST /pos/product/{id}/modifier/add)
-        mis: { modifierGroupId, name: "Extra Shot", additionalPrice: 5000 }
-             { modifierGroupId, name: "Oat Milk",   additionalPrice: 8000 }
-             { modifierGroupId, name: "Vanilla",    additionalPrice: 3000 }
+        mis: { modifierGroupId, name: "Normal",     additionalPrice: 0     }
+             { modifierGroupId, name: "Less Sugar",  additionalPrice: 0     }
+             { modifierGroupId, name: "Extra Shot",  additionalPrice: 5.000 }
+             { modifierGroupId, name: "Oat Milk",    additionalPrice: 8.000 }
               |
         Produk + modifier aktif dan tersedia di POS
 ```
@@ -421,13 +439,13 @@ product (productType=MODIFIER)
 ```
 Kasir memilih produk MODIFIER di POS
   |
-Kasir memilih pilihan modifier (opsional / wajib sesuai konfigurasi group)
-Validasi: jumlah pilihan harus dalam rentang minSelect ≤ n ≤ maxSelect
+Kasir memilih modifier (opsional / wajib sesuai konfigurasi group)
+Validasi: minSelect ≤ jumlah pilihan ≤ maxSelect per group
   |
-Harga dihitung: product.price + sum(modifier.additionalPrice)
+Harga = product.price + sum(modifier.additionalPrice)
   |
-TransactionItem disimpan dengan: productId
-TransactionModifier disimpan per modifier yang dipilih (transactionItemId + modifierId)
+TransactionItem    : productId (tanpa variantId)
+TransactionModifier: per modifier yang dipilih
 Stok dikurangi dari Stock produk utama saja
 ```
 
@@ -440,7 +458,7 @@ Stok dikurangi dari Stock produk utama saja
 | 3 | `maxSelect` | Wajib; harus >= `minSelect` dan >= 1 | 400 Bad Request |
 | 4 | `isRequired` | Wajib diisi (boolean) | 400 Bad Request |
 | 5 | `name` (modifier) | Wajib diisi | 400 Bad Request |
-| 6 | `additionalPrice` | Wajib; harus >= 0 | 400 Bad Request |
+| 6 | `additionalPrice` | Wajib; harus >= 0 (boleh 0) | 400 Bad Request |
 | 7 | `modifierGroupId` | Harus valid dan milik produk yang sama | 404 Not Found |
 | 8 | Hapus modifier group | Tidak dapat dihapus jika masih ada modifier aktif di dalamnya | 400 Bad Request |
 | 9 | Hapus modifier | Tidak dapat dihapus jika masih digunakan di transaksi | 400 Bad Request |
@@ -463,109 +481,145 @@ Stok dikurangi dari Stock produk utama saja
 
 #### Tipe Produk
 
-| Tipe | Keterangan | Stok | Sub-entitas |
-|------|------------|------|-------------|
-| `SIMPLE` | Produk tunggal tanpa varian maupun add-on | Per produk | — |
-| `VARIANT` | Produk dengan beberapa kelompok varian; kasir wajib memilih satu opsi per group | Per varian | `product_variant_group`, `product_variant` |
-| `MODIFIER` | Produk dengan add-on opsional/wajib; kasir bisa memilih beberapa opsi | Per produk | `product_modifier_group`, `product_modifier` |
+| Tipe | Keterangan | Dapat Modifier Group? | Stok |
+|------|------------|-----------------------|------|
+| `SIMPLE` | Produk tunggal tanpa varian maupun add-on | Tidak | Per produk |
+| `VARIANT` | Produk dengan variant groups; kasir wajib pilih satu opsi per required group | **Ya** — modifier sebagai add-on di atas varian | Per varian |
+| `MODIFIER` | Produk dengan modifier groups saja, tanpa varian | Ya | Per produk |
 
-#### Konfigurasi Produk — Tiga Pola Umum
+#### Konfigurasi Produk — Empat Pola
 
-**Pola 1 — Produk tanpa variant (SIMPLE)**
+**Pola 1 — Produk SIMPLE**
 
-Produk dijual apa adanya, tidak ada pilihan apapun yang perlu dipilih kasir.
+Produk dijual apa adanya, tidak ada pilihan apapun.
 
 ```
-Produk: Nasi Goreng (Rp 25.000)
+Produk: Nasi Goreng (Rp 25.000, productType=SIMPLE)
   └── (tidak ada sub-entitas)
 
-Kasir: langsung pilih Nasi Goreng → harga Rp 25.000
-Stok: dipotong dari stock.productId
+Kasir : langsung pilih → harga Rp 25.000
+Stok  : dipotong dari stock.productId
 ```
 
 ---
 
-**Pola 2 — Produk dengan variant langsung (VARIANT)**
+**Pola 2 — Produk VARIANT (tanpa modifier)**
 
-Produk memiliki satu atau lebih kelompok varian. Kasir wajib memilih satu opsi dari setiap kelompok yang required. Setiap opsi dapat memiliki SKU dan stok tersendiri.
+Satu atau lebih variant groups. `additionalPrice` boleh 0.
 
 ```
 Produk: Kopi (harga dasar Rp 15.000, productType=VARIANT)
   └── Variant Group: "Suhu" (isRequired=true)
-        ├── Variant: Hot   (additionalPrice=0,    sku="KOPI-H")
-        └── Variant: Ice   (additionalPrice=2.000, sku="KOPI-I")
+        ├── Variant: Hot  (additionalPrice=0)      ← tidak ada tambahan harga
+        └── Variant: Ice  (additionalPrice=2.000)
 
-Kasir: pilih Kopi → wajib pilih Suhu → pilih "Ice"
-Harga: Rp 15.000 + Rp 2.000 = Rp 17.000
-Stok: dipotong dari stock(productId=Kopi, variantId=Ice)
+Kasir : pilih Kopi → pilih "Hot"
+Harga : Rp 15.000 + Rp 0 = Rp 15.000
+Stok  : dipotong dari stock(productId=Kopi, variantId=Hot)
 ```
 
 ---
 
-**Pola 3 — Produk dengan modifier group dan opsi di dalamnya (MODIFIER)**
+**Pola 3 — Produk MODIFIER (tanpa variant)**
 
-Produk memiliki satu atau lebih kelompok add-on. Setiap kelompok memiliki pilihan yang dapat dipilih kasir sesuai batas `minSelect`/`maxSelect`. Kasir tidak wajib memilih jika `isRequired=false`.
+Satu atau lebih modifier groups. `additionalPrice` boleh 0.
 
 ```
-Produk: Kopi (harga dasar Rp 15.000, productType=MODIFIER)
-  └── Modifier Group: "Size" (isRequired=true, minSelect=1, maxSelect=1)
-        ├── Modifier: Small   (additionalPrice=0)
-        ├── Modifier: Medium  (additionalPrice=5.000)
-        └── Modifier: Large   (additionalPrice=10.000)
+Produk: Es Teh (harga dasar Rp 8.000, productType=MODIFIER)
+  └── Modifier Group: "Level Gula" (isRequired=true, minSelect=1, maxSelect=1)
+        ├── Modifier: Normal Sugar  (additionalPrice=0)   ← tidak ada tambahan
+        ├── Modifier: Less Sugar    (additionalPrice=0)
+        └── Modifier: Extra Sweet   (additionalPrice=0)
 
-Kasir: pilih Kopi → wajib pilih Size → pilih "Large"
-Harga: Rp 15.000 + Rp 10.000 = Rp 25.000
-Stok: dipotong dari stock.productId (Kopi), modifier tidak punya stok sendiri
+Kasir : pilih Es Teh → pilih "Less Sugar"
+Harga : Rp 8.000 + Rp 0 = Rp 8.000
+Stok  : dipotong dari stock.productId (Es Teh)
 ```
 
-> **Catatan:** Modifier group bersifat add-on — satu produk dapat memiliki lebih dari satu modifier group. Contoh: Kopi dengan group "Size" (required, pilih 1) dan group "Topping" (opsional, pilih 0–3).
+---
 
-#### 2.5 Aturan Perubahan Tipe Produk
+**Pola 4 — Produk VARIANT dengan Modifier (kombinasi)**
 
-Perubahan `productType` setelah produk aktif digunakan dalam transaksi memiliki risiko integritas data dan harus mengikuti aturan berikut.
+Produk memiliki variant groups (menentukan versi dan stok) sekaligus modifier groups (add-on di atas varian yang dipilih). `additionalPrice` pada keduanya boleh 0.
 
-**Pertanyaan:** Bisakah produk yang sudah memiliki variant/modifier dikembalikan ke tipe tanpa variant jika sudah ada transaksi?
+```
+Produk: Kopi (harga dasar Rp 15.000, productType=VARIANT)
+  ├── Variant Group: "Ukuran" (isRequired=true)
+  │     ├── Variant: Small   (additionalPrice=0,      sku="KOPI-S")
+  │     ├── Variant: Medium  (additionalPrice=5.000,  sku="KOPI-M")
+  │     └── Variant: Large   (additionalPrice=10.000, sku="KOPI-L")
+  │
+  ├── Modifier Group: "Suhu" (isRequired=true, minSelect=1, maxSelect=1)
+  │     ├── Modifier: Hot   (additionalPrice=0)
+  │     └── Modifier: Ice   (additionalPrice=0)
+  │
+  └── Modifier Group: "Topping" (isRequired=false, minSelect=0, maxSelect=3)
+        ├── Modifier: Extra Shot  (additionalPrice=5.000)
+        ├── Modifier: Oat Milk    (additionalPrice=8.000)
+        └── Modifier: Vanilla     (additionalPrice=3.000)
 
-**Jawaban:** **Tidak bisa**, selama produk tersebut masih terhubung ke transaksi (baik PAID maupun PENDING). Alasannya:
+Kasir : pilih Kopi
+         → pilih Ukuran: Medium  (+Rp 5.000)
+         → pilih Suhu  : Ice     (+Rp 0)
+         → pilih Topping: Extra Shot (+Rp 5.000) + Oat Milk (+Rp 8.000)
+
+Harga : Rp 15.000 + Rp 5.000 + Rp 0 + Rp 5.000 + Rp 8.000 = Rp 33.000
+Stok  : dipotong dari stock(productId=Kopi, variantId=Medium)
+```
+
+> Modifier group pada produk VARIANT berlaku untuk **semua varian** — tidak bisa dikonfigurasi per varian.
+
+#### 2.5 Aturan Perubahan Tipe Produk & Penambahan Sub-entitas
+
+**Penambahan modifier group ke produk VARIANT yang sudah ada transaksi:**
+
+Diperbolehkan selama modifier baru **tidak merusak transaksi lama** — transaksi lama tidak punya `TransactionModifier` untuk modifier baru, dan itu valid.
+
+**Penambahan variant group ke produk MODIFIER yang sudah ada transaksi:**
+
+**Tidak diperbolehkan** — ini berarti mengubah `productType` dari MODIFIER ke VARIANT, yang merusak histori stok dan referensi `variantId` di transaksi lama.
+
+**Matriks izin perubahan `productType`:**
+
+| Perubahan | Belum ada transaksi | Sudah ada transaksi |
+|-----------|:-------------------:|:-------------------:|
+| `SIMPLE` → `VARIANT` | ✅ | ❌ |
+| `SIMPLE` → `MODIFIER` | ✅ | ❌ |
+| `VARIANT` → `SIMPLE` | ✅ | ❌ |
+| `VARIANT` → `MODIFIER` | ✅ | ❌ |
+| `MODIFIER` → `SIMPLE` | ✅ | ❌ |
+| `MODIFIER` → `VARIANT` | ✅ | ❌ |
+
+**Alasan blokir jika sudah ada transaksi:**
 
 | Dampak | Penjelasan |
 |--------|-----------|
-| Histori transaksi rusak | `transaction_items.variant_id` menyimpan referensi ke varian yang dipilih. Jika varian dihapus atau tipe diubah, data histori tidak bisa diinterpretasikan |
-| Stok tidak konsisten | Stok produk VARIANT dikelola per varian — tidak ada cara otomatis untuk menggabungkan stok beberapa varian menjadi satu |
-| Laporan tidak akurat | Laporan produk terlaris yang memiliki breakdown per varian akan rusak |
+| Histori transaksi rusak | `transaction_items.variant_id` mereferensi varian yang dipilih; jika tipe berubah, data histori tidak bisa diinterpretasikan |
+| Stok tidak konsisten | Stok VARIANT dikelola per varian — tidak bisa digabung otomatis ke satu stok produk |
+| Laporan tidak akurat | Breakdown per varian di laporan akan rusak |
 
-**Matriks izin perubahan tipe:**
+**Operasi yang tetap diperbolehkan meski sudah ada transaksi:**
 
-| Kondisi Produk | SIMPLE → VARIANT | SIMPLE → MODIFIER | VARIANT → SIMPLE | MODIFIER → SIMPLE |
-|----------------|:-:|:-:|:-:|:-:|
-| Belum pernah ditransaksikan | ✅ | ✅ | ✅ | ✅ |
-| Sudah ada transaksi, semua varian inactive | ❌ | ❌ | ❌ | ❌ |
-| Sudah ada transaksi | ❌ | ❌ | ❌ | ❌ |
+| Operasi | Kondisi |
+|---------|---------|
+| Tambah modifier group ke produk VARIANT | ✅ selalu boleh |
+| Tambah modifier option baru | ✅ selalu boleh |
+| Tambah variant option baru ke group yang ada | ✅ boleh, buat Stock record baru |
+| Nonaktifkan variant/modifier (`isActive=false`) | ✅ jika tidak ada transaksi PENDING |
+| Edit `additionalPrice` variant/modifier | ✅ tidak mempengaruhi transaksi lama (snapshot sudah tersimpan) |
 
-**Alternatif yang direkomendasikan jika produk perlu diganti tipe:**
+**Alternatif jika produk perlu ganti tipe:**
 
 ```
-Produk lama (VARIANT/MODIFIER) sudah ada transaksi
+Produk lama sudah ada transaksi
   |
   ├── Opsi 1: Nonaktifkan produk lama (isActive=false)
   │           Buat produk baru dengan tipe yang diinginkan
   │           (histori transaksi lama tetap terjaga)
   │
   └── Opsi 2: Nonaktifkan semua varian/modifier (isActive=false)
-              Produk tetap berjalan tapi kasir tidak perlu memilih opsi apapun
-              (tidak mengubah productType, histori tetap valid)
-```
-
-**Alur nonaktifkan varian:**
-
-```
-[Admin] --> PUT /pos/product/{id}/variant/{variantId}
-        { isActive: false }
-              |
-        Validasi: tidak ada transaksi PENDING yang menggunakan variantId ini
-              |
-        Set variant.isActive = false
-        Variant tidak muncul di POS, tetapi data histori tetap ada
+              Produk tetap berjalan tapi kasir tidak perlu memilih opsi
+              (productType tidak berubah, histori tetap valid)
 ```
 
 ---
